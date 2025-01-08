@@ -1,4 +1,0 @@
-telegram:
-  botToken: "YOUR_BOT_TOKEN"
-  chatId: "YOUR_CHAT_ID"
-language: "en" #ar (arabic), ru (russian), ua (ukranian), kz(Kazakh), en(english), es(Espanol)
