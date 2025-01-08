@@ -25,22 +25,11 @@ jobs:
       - name: Build with Maven
         run: mvn clean package
 
-      - name: Verify JAR file exists
-        id: verify_jar
-        run: |
-          if [ -f "target/tg2nukkit-1.2.jar" ]; then
-            echo "JAR file found: target/tg2nukkit-1.2.jar"
-            echo "JAR_PATH=target/tg2nukkit-1.2.jar" >> $GITHUB_ENV
-          else
-            echo "JAR file not found!"
-            exit 1
-          fi
-
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
         with:
           name: TG2Nukkit
-          path: ${{ env.JAR_PATH }}
+          path: target/tg2nukkit-1.2.jar
 
       - name: Create Release
         if: github.ref == 'refs/heads/main'
@@ -61,7 +50,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ env.JAR_PATH }}
+          asset_path: target/tg2nukkit-1.2.jar
           asset_name: tg2nukkit-1.2.jar
           asset_content_type: application/java-archive
 
