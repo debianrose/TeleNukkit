@@ -14,13 +14,13 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Set up JDK 17
-      uses: actions/ssetup-java@v4
+      uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
 
     - name: Build with Maven
-      run: mvn -B package --file pom.xml  # Только сборка, без deploy
+      run: mvn clean package --file pom.xml  # Только сборка, без deploy
 
     - name: Upload JAR to Release
       uses: actions/upload-release-asset@v1
