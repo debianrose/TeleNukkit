@@ -25,16 +25,12 @@ jobs:
       - name: Build with Maven
         run: mvn clean package
 
-      - name: List target directory
-        run: ls -l target
-
       - name: Verify JAR file exists
         id: verify_jar
         run: |
-          JAR_PATH=$(ls target/*.jar)
-          if [ -f "$JAR_PATH" ]; then
-            echo "JAR file found: $JAR_PATH"
-            echo "JAR_PATH=$JAR_PATH" >> $GITHUB_ENV
+          if [ -f "target/tg2nukkit-1.2.jar" ]; then
+            echo "JAR file found: target/tg2nukkit-1.2.jar"
+            echo "JAR_PATH=target/tg2nukkit-1.2.jar" >> $GITHUB_ENV
           else
             echo "JAR file not found!"
             exit 1
@@ -66,5 +62,8 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ${{ env.JAR_PATH }}
-          asset_name: TG2Nukkit.jar
+          asset_name: tg2nukkit-1.2.jar
           asset_content_type: application/java-archive
+
+      - name: Clean up target directory
+        run: rm -rf target
