@@ -8,24 +8,24 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write 
+      contents: write  # Для загрузки артефактов в релиз
 
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v4
+      uses: actions/ssetup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
 
     - name: Build with Maven
-      run: mvn -B package --file pom.xml
+      run: mvn -B package --file pom.xml  # Только сборка, без deploy
 
     - name: Upload JAR to Release
       uses: actions/upload-release-asset@v1
       with:
-        upload_url: ${{ github.event.release.upload_url }} 
-        asset_path: target/tg2nukkit-${{ github.event.release.tag_name }}.jar  
+        upload_url: ${{ github.event.release.upload_url }}  # URL для загрузки артефактов
+        asset_path: target/tg2nukkit-${{ github.event.release.tag_name }}.jar  # Путь к JAR-файлу
         asset_name: tg2nukkit-${{ github.event.release.tag_name }}.jar  # Имя файла в релизе
-        asset_content_type: application/java-archive 
+        asset_content_type: application/java-archive  # Тип файла
