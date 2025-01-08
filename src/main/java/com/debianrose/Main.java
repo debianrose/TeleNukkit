@@ -1,4 +1,4 @@
-package com.debianrose; //Privet! my telegram is - fxsharic
+package com.debianrose;
 
 import cn.nukkit.plugin.PluginBase;
 import cn.nukkit.event.Listener;
@@ -15,10 +15,16 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 
 public class Main extends PluginBase implements Listener {
+
+    private static final String GITHUB_REPO = "kamikarus/TG2Nukkit";
 
     private TelegramBot bot;
     private String botToken;
@@ -49,47 +55,43 @@ public class Main extends PluginBase implements Listener {
         } else {
             this.getLogger().error("Bot token is not set in config.yml!");
         }
+
+        this.checkForUpdates();
     }
 
     private void loadLanguages() {
         this.languages = new HashMap<>();
 
-        // Английский
         Map<String, String> en = new HashMap<>();
         en.put("online", "Players online: ");
         en.put("join", " joined the game!");
         en.put("quit", " left the game!");
         this.languages.put("en", en);
 
-        // Русский
         Map<String, String> ru = new HashMap<>();
         ru.put("online", "Игроков онлайн: ");
         ru.put("join", " зашел на сервер!");
         ru.put("quit", " вышел с сервера!");
         this.languages.put("ru", ru);
 
-        // Украинский
         Map<String, String> ua = new HashMap<>();
         ua.put("online", "Гравців онлайн: ");
         ua.put("join", " зайшов на сервер!");
         ua.put("quit", " вийшов з сервера!");
         this.languages.put("ua", ua);
 
-        // Казахский
         Map<String, String> kz = new HashMap<>();
         kz.put("online", "Ойыншылар онлайн: ");
         kz.put("join", " серверге кірді!");
         kz.put("quit", " серверден шықты!");
         this.languages.put("kz", kz);
 
-        // Испанский
         Map<String, String> es = new HashMap<>();
         es.put("online", "Jugadores en línea: ");
         es.put("join", " se unió al juego!");
         es.put("quit", " dejó el juego!");
         this.languages.put("es", es);
 
-        // Арабский
         Map<String, String> ar = new HashMap<>();
         ar.put("online", "اللاعبون على الإنترنت: ");
         ar.put("join", " انضم إلى اللعبة!");
@@ -131,13 +133,68 @@ public class Main extends PluginBase implements Listener {
         return false;
     }
 
+    private void checkForUpdates() {
+        this.getLogger().info("Checking for updates...");
+
+        try {
+            URL url = new URL("https://api.github.com/repos/" + GITHUB_REPO + "/releases/latest");
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+            StringBuilder response = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                response.append(line);
+            }
+            reader.close();
+
+            JSONObject json = new JSONObject(response.toString());
+            String latestVersion = json.getString("tag_name").replace("v", "");
+            String currentVersion = this.getDescription().getVersion();
+
+            if (isNewerVersion(latestVersion, currentVersion)) {
+                String updateMessage = "A new version of TG2Nukkit is available: v" + latestVersion + " (you have v" + currentVersion + "). " +
+                        "Download it from: https://github.com/" + GITHUB_REPO + "/releases/latest";
+                this.getLogger().warning(updateMessage);
+
+                if (bot != null) {
+                    bot.sendToTelegram(updateMessage);
+                }
+            } else {
+                this.getLogger().info("TG2Nukkit is up to date!");
+            }
+        } catch (Exception e) {
+            this.getLogger().error("Failed to check for updates: " + e.getMessage());
+        }
+    }
+
+    private boolean isNewerVersion(String latestVersion, String currentVersion) {
+        String[] latestParts = latestVersion.split("\\.");
+        String[] currentParts = currentVersion.split("\\.");
+
+        for (int i = 0; i < Math.min(latestParts.length, currentParts.length); i++) {
+            int latest = Integer.parseInt(latestParts[i]);
+            int current = Integer.parseInt(currentParts[i]);
+
+            if (latest > current) {
+                return true;
+            } else if (latest < current) {
+                return false;
+            }
+        }
+
+        return latestParts.length > currentParts.length;
+    }
+
     private class TelegramBot extends TelegramLongPollingBot {
 
         @Override
         public void onUpdateReceived(Update update) {
             if (update.hasMessage() && update.getMessage().hasText()) {
-                long messageDate = update.getMessage().getDate(); 
-                if (messageDate >= botStartTime) { 
+                long messageDate = update.getMessage().getDate();
+                if (messageDate >= botStartTime) {
                     String text = update.getMessage().getText();
                     if (text.equalsIgnoreCase("/online")) {
                         String onlineMessage = languages.get(language).get("online") + getServer().getOnlinePlayers().size();

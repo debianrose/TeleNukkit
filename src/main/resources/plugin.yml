@@ -1,5 +1,5 @@
 name: TG2Nukkit
-version: 1.3
+version: 1.2.1
 main: com.debianrose.Main
 api: ["1.0.0"]
 author: desharish
