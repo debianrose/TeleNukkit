@@ -1,0 +1,15 @@
+name: TG2Nukkit
+version: 1.0
+main: com.debianrose.Main
+api: ["1.0.0"]
+author: desharish
+description: Bridge Between Telegram And Nukkit
+commands:
+  setlanguage:
+    description: Change the plugin language.
+    usage: /setlanguage <ru|en|es|uk|kk|ar>
+    permission: op
+permissions:
+  telegrambridge.setlanguage:
+    description: Allows changing the plugin language.
+    default: op
