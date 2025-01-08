@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write  # Для публикации в GitHub Packages
+      packages: write  # Для публикации в GitHub Package
 
     steps:
     - uses: actions/checkout@v4
