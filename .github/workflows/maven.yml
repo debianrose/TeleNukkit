@@ -25,10 +25,13 @@ jobs:
       - name: Build with Maven
         run: mvn clean package
 
+      - name: List target directory
+        run: ls -l target
+
       - name: Verify JAR file exists
         id: verify_jar
         run: |
-          JAR_PATH=$(ls target/TG2Nukkit-*.jar)
+          JAR_PATH=$(ls target/*.jar)
           if [ -f "$JAR_PATH" ]; then
             echo "JAR file found: $JAR_PATH"
             echo "JAR_PATH=$JAR_PATH" >> $GITHUB_ENV
