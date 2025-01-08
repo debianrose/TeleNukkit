@@ -44,6 +44,11 @@
             <artifactId>telegrambots</artifactId>
             <version>6.5.0</version>
         </dependency>
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifastId>
+            <version>20231013</version>
+        </dependency>
     </dependencies>
 
     <build>
