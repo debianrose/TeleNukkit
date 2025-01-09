@@ -10,6 +10,7 @@ import cn.nukkit.command.Command;
 import cn.nukkit.command.CommandSender;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updates.GetUpdates;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
@@ -20,6 +21,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.json.JSONObject;
 
@@ -34,12 +36,17 @@ public class Main extends PluginBase implements Listener {
     private Map<String, Map<String, String>> languages;
     private long botStartTime;
 
+    private String telegramToMinecraftFormat;
+    private String minecraftToTelegramFormat;
+
     @Override
     public void onEnable() {
         this.saveDefaultConfig();
         this.botToken = this.getConfig().getString("telegram.botToken");
-        this.chatId = this.getConfig().getString("telegram.chatId");
         this.language = this.getConfig().getString("language", "en");
+
+        this.telegramToMinecraftFormat = this.getConfig().getString("telegram-to-minecraft-format", "[TG] {sender}: {message}");
+        this.minecraftToTelegramFormat = this.getConfig().getString("minecraft-to-telegram-format", "[MC] {sender}: {message}");
 
         this.loadLanguages();
         this.getServer().getPluginManager().registerEvents(this, this);
@@ -50,6 +57,15 @@ public class Main extends PluginBase implements Listener {
                 this.bot = new TelegramBot();
                 botsApi.registerBot(this.bot);
                 this.botStartTime = System.currentTimeMillis() / 1000;
+
+                this.chatId = this.bot.getChatId();
+                if (this.chatId != null) {
+                    this.getConfig().set("telegram.chatId", this.chatId);
+                    this.saveConfig();
+                    this.getLogger().info("Chat ID автоматически определен: " + this.chatId);
+                } else {
+                    this.getLogger().warning("Не удалось определить Chat ID. Убедитесь, что бот добавлен в чат и ему отправлено сообщение.");
+                }
             } catch (TelegramApiException e) {
                 this.getLogger().error("Failed to initialize Telegram bot", e);
             }
@@ -102,41 +118,86 @@ public class Main extends PluginBase implements Listener {
 
     @EventHandler
     public void onPlayerChat(PlayerChatEvent event) {
+        String sender = event.getPlayer().getName();
         String message = event.getMessage();
-        this.bot.sendToTelegram(event.getPlayer().getName() + ": " + message);
+        String formattedMessage = minecraftToTelegramFormat.replace("{sender}", sender).replace("{message}", message);
+        this.bot.sendToTelegram(formattedMessage);
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        String joinMessage = event.getPlayer().getName() + languages.get(language).get("join");
+        String sender = event.getPlayer().getName();
+        String joinMessage = minecraftToTelegramFormat.replace("{sender}", sender).replace("{message}", languages.get(language).get("join"));
         this.bot.sendToTelegram(joinMessage);
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        String quitMessage = event.getPlayer().getName() + languages.get(language).get("quit");
+        String sender = event.getPlayer().getName();
+        String quitMessage = minecraftToTelegramFormat.replace("{sender}", sender).replace("{message}", languages.get(language).get("quit"));
         this.bot.sendToTelegram(quitMessage);
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (command.getName().equalsIgnoreCase("setlanguage")) {
-            if (args.length == 1 && this.languages.containsKey(args[0])) {
-                this.language = args[0];
-                this.getConfig().set("language", args[0]);
-                this.saveConfig();
-                sender.sendMessage("Language set to " + args[0]);
-            } else {
-                sender.sendMessage("Usage: /setlanguage <ru|en|es|uk|kk|ar>");
+        if (command.getName().equalsIgnoreCase("tg2nk") || command.getName().equalsIgnoreCase("tg2nukkit")) {
+            if (args.length == 0) {
+                sender.sendMessage("§aTG2Nukkit Menu:");
+                sender.sendMessage("§b/tg2nk language §7- Change language");
+                sender.sendMessage("§b/tg2nk format §7- Change message format");
+                sender.sendMessage("§b/tg2nk update §7- Check for updates");
+                return true;
             }
-            return true;
+
+            switch (args[0].toLowerCase()) {
+                case "language":
+                    if (args.length == 2 && this.languages.containsKey(args[1])) {
+                        this.language = args[1];
+                        this.getConfig().set("language", args[1]);
+                        this.saveConfig();
+                        sender.sendMessage("§aLanguage set to " + args[1]);
+                    } else {
+                        sender.sendMessage("§cUsage: /tg2nk language <ru|en|es|uk|kk|ar>");
+                    }
+                    return true;
+
+                case "format":
+                    if (args.length == 3) {
+                        String formatType = args[1].toLowerCase();
+                        String newFormat = args[2];
+
+                        if (formatType.equals("telegram") || formatType.equals("minecraft")) {
+                            if (formatType.equals("telegram")) {
+                                this.telegramToMinecraftFormat = newFormat;
+                                this.getConfig().set("telegram-to-minecraft-format", newFormat);
+                            } else {
+                                this.minecraftToTelegramFormat = newFormat;
+                                this.getConfig().set("minecraft-to-telegram-format", newFormat);
+                            }
+
+                            this.saveConfig();
+                            sender.sendMessage("§aFormat updated successfully!");
+                        } else {
+                            sender.sendMessage("§cUsage: /tg2nk format <telegram|minecraft> <new_format>");
+                        }
+                    } else {
+                        sender.sendMessage("§cUsage: /tg2nk format <telegram|minecraft> <new_format>");
+                    }
+                    return true;
+
+                case "update":
+                    this.checkForUpdates();
+                    return true;
+
+                default:
+                    sender.sendMessage("§cUnknown command. Use /tg2nk for help.");
+                    return true;
+            }
         }
         return false;
     }
 
     private void checkForUpdates() {
-        this.getLogger().info("Checking for updates...");
-
         try {
             URL url = new URL("https://api.github.com/repos/" + GITHUB_REPO + "/releases/latest");
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -156,7 +217,7 @@ public class Main extends PluginBase implements Listener {
             String currentVersion = this.getDescription().getVersion();
 
             if (isNewerVersion(latestVersion, currentVersion)) {
-                String updateMessage = "A new version of TG2Nukkit is available: v" + latestVersion + " (you have v" + currentVersion + "). " +
+                String updateMessage = "§cA new version of TG2Nukkit is available: v" + latestVersion + " (you have v" + currentVersion + "). " +
                         "Download it from: https://github.com/" + GITHUB_REPO + "/releases/latest";
                 this.getLogger().warning(updateMessage);
 
@@ -201,7 +262,8 @@ public class Main extends PluginBase implements Listener {
                         String onlineMessage = languages.get(language).get("online") + getServer().getOnlinePlayers().size();
                         this.sendToChat(onlineMessage);
                     } else {
-                        String message = "[Telegram] " + update.getMessage().getFrom().getUserName() + ": " + text;
+                        String sender = update.getMessage().getFrom().getUserName();
+                        String message = telegramToMinecraftFormat.replace("{sender}", sender).replace("{message}", text);
                         getServer().broadcastMessage(message);
                     }
                 }
@@ -238,6 +300,20 @@ public class Main extends PluginBase implements Listener {
             } catch (TelegramApiException e) {
                 getLogger().error("Failed to send message to Telegram", e);
             }
+        }
+
+        public String getChatId() {
+            try {
+                List<Update> updates = this.execute(new GetUpdates());
+                for (Update update : updates) {
+                    if (update.hasMessage()) {
+                        return update.getMessage().getChatId().toString();
+                    }
+                }
+            } catch (TelegramApiException e) {
+                getLogger().error("Failed to get chat ID", e);
+            }
+            return null;
         }
     }
 }
