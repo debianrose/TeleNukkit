@@ -39,22 +39,13 @@ publishing {
             version = project.version
         }
     }
-<<<<<<< HEAD
-repositories {
-    maven {
-        url = 'https://maven.pkg.github.com/kamikarus/TG2Nukkit'
-        credentials {
-            username = System.getenv("GITHUB_ACTOR") // Имя пользователя GitHub
-            password = System.getenv("GH_PAT") // Используем PAT
-=======
     repositories {
         maven {
             url = 'https://maven.pkg.github.com/kamikarus/TG2Nukkit'
             credentials {
-                username = System.getenv("KamikaRus")
-                password = System.getenv("GH_PAT")
+                username = System.getenv("GITHUB_ACTOR") // Имя пользователя GitHub
+                password = System.getenv("GH_PAT") // Используем PAT
             }
->>>>>>> 0331fe0bc2fd98444c39a22583af81994adbafe5
         }
     }
 }
