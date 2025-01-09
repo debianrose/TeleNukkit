@@ -1,0 +1,54 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+}
+
+group 'com.debianrose'
+version '1.2.1'
+
+sourceCompatibility = 17
+targetCompatibility = 17
+
+repositories {
+    mavenCentral()
+    maven {
+        url 'https://repo.opencollab.dev/maven-releases/'
+    }
+    maven {
+        url 'https://repo.opencollab.dev/maven-snapshots/'
+    }
+}
+
+dependencies {
+    compileOnly 'cn.nukkit:nukkit:1.0-SNAPSHOT' // provided scope в Maven
+    implementation 'org.telegram:telegrambots:6.5.0'
+    implementation 'org.json:json:20231013'
+}
+
+java {
+    withSourcesJar() // Генерация sources JAR
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            groupId = project.group
+            artifactId = 'tg2nukkit'
+            version = project.version
+        }
+    }
+    repositories {
+        maven {
+            url = 'https://maven.pkg.github.com/kamikarus/TG2Nukkit'
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
