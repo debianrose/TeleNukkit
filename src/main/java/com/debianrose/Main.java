@@ -10,7 +10,8 @@ import cn.nukkit.command.Command;
 import cn.nukkit.command.CommandSender;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
-import org.telegram.telegrambots.meta.api.methods.updates.GetUpdates;
+import org.telegram.telegrambots.meta.api.objects.Chat;
+import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
@@ -20,14 +21,13 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import org.json.JSONObject;
 
 public class Main extends PluginBase implements Listener {
     private static final String GITHUB_REPO = "kamikarus/TG2Nukkit";
     private TelegramBot bot;
-    private String botToken, chatId, language;
+    private String botToken, language;
     private Map<String, Map<String, String>> languages;
     private long botStartTime;
     private String telegramToMinecraftFormat, minecraftToTelegramFormat;
@@ -48,14 +48,7 @@ public class Main extends PluginBase implements Listener {
                 bot = new TelegramBot();
                 botsApi.registerBot(bot);
                 botStartTime = System.currentTimeMillis() / 1000;
-                chatId = bot.getChatId();
-                if (chatId != null) {
-                    getConfig().set("telegram.chatId", chatId);
-                    saveConfig();
-                    getLogger().info("Chat ID автоматически определен: " + chatId);
-                } else {
-                    getLogger().warning("Не удалось определить Chat ID. Убедитесь, что бот добавлен в чат и ему отправлено сообщение.");
-                }
+                getLogger().info("Telegram бот успешно запущен!");
             } catch (TelegramApiException e) {
                 getLogger().error("Failed to initialize Telegram bot", e);
             }
@@ -176,11 +169,19 @@ public class Main extends PluginBase implements Listener {
         @Override
         public void onUpdateReceived(Update update) {
             if (update.hasMessage() && update.getMessage().hasText() && update.getMessage().getDate() >= botStartTime) {
-                String text = update.getMessage().getText();
-                if (text.equalsIgnoreCase("/online")) {
-                    sendToChat(languages.get(language).get("online") + getServer().getOnlinePlayers().size());
-                } else {
-                    getServer().broadcastMessage(telegramToMinecraftFormat.replace("{sender}", update.getMessage().getFrom().getUserName()).replace("{message}", text));
+                Message message = update.getMessage();
+                Chat chat = message.getChat();
+                if (chat.isGroupChat() || chat.isSuperGroupChat()) {
+                    String text = message.getText();
+                    if (text.equalsIgnoreCase("/online")) {
+                        sendToChat(chat.getId().toString(), languages.get(language).get("online") + getServer().getOnlinePlayers().size());
+                    } else {
+                        String sender = message.getFrom().getUserName();
+                        String formattedMessage = telegramToMinecraftFormat
+                                .replace("{sender}", sender)
+                                .replace("{message}", text);
+                        getServer().broadcastMessage(formattedMessage);
+                    }
                 }
             }
         }
@@ -191,31 +192,14 @@ public class Main extends PluginBase implements Listener {
         @Override
         public String getBotToken() { return botToken; }
 
-        public void sendToTelegram(String message) {
+        public void sendToTelegram(String message) {}
+
+        public void sendToChat(String chatId, String message) {
             try {
                 execute(new SendMessage(chatId, message));
             } catch (TelegramApiException e) {
                 getLogger().error("Failed to send message to Telegram", e);
             }
-        }
-
-        public void sendToChat(String message) {
-            try {
-                execute(new SendMessage(chatId, message));
-            } catch (TelegramApiException e) {
-                getLogger().error("Failed to send message to Telegram", e);
-            }
-        }
-
-        public String getChatId() {
-            try {
-                for (Update update : execute(new GetUpdates())) {
-                    if (update.hasMessage()) return update.getMessage().getChatId().toString();
-                }
-            } catch (TelegramApiException e) {
-                getLogger().error("Failed to get chat ID", e);
-            }
-            return null;
         }
     }
 }
