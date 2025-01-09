@@ -2,3 +2,7 @@ telegram:
   botToken: "YOUR_BOT_TOKEN"
   chatId: "YOUR_CHAT_ID"
 language: "en" #ar (arabic), ru (russian), ua (ukranian), kz(Kazakh), en(english), es(Espanol)
+
+telegram-to-minecraft-format: "[Telegram] {sender}: {message}" # you can change it!
+
+minecraft-to-telegram-format: "[Minecraft] {sender}: {message}" # you an change it!
