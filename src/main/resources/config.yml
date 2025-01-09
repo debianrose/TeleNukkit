@@ -1,12 +1,10 @@
 # Config Version - 2
 telegram:
 
-  botToken: "ВАШ_TELEGRAM_BOT_TOKEN"
-
-  chatId: ""
+  botToken: "TELEGRAM_BOT_TOKEN"
 
 # supports: en, ru, ua, kz, es, ar
-language: "ru"
+language: "en"
 
 telegram-to-minecraft-format: "[TG] {sender}: {message}"
 minecraft-to-telegram-format: "[MC] {sender}: {message}"
