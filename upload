@@ -19,8 +19,8 @@ fi
 
 echo "Создание тега и релиза..."
 gh release create $VERSION \
-  --title "Release $VERSION" \
-  --notes "Автоматически созданный релиз версии $VERSION."
+  --title "$VERSION" \
+  --notes "Автоматически созданный релиз версии $VERSION"
 
 if [ $? -ne 0 ]; then
   echo "Ошибка: Не удалось создать релиз."

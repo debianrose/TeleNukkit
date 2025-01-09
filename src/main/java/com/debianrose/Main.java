@@ -62,7 +62,12 @@ public class Main extends PluginBase implements Listener {
         } else {
             getLogger().error("Bot token is not set in config.yml!");
         }
-        checkForUpdates();
+
+        if (getConfig().getBoolean("check-for-updates", true)) {
+            checkForUpdates();
+        } else {
+            getLogger().info("Проверка обновлений отключена в config.yml.");
+        }
     }
 
     private void loadLanguages() {
