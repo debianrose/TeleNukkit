@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  release:
+    types: [published] # Workflow запускается при публикации релиза
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'temurin'
+
+      - name: Build with Maven
+        run: mvn clean package
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }} # URL для загрузки файла в релиз
+          asset_path: target/tg2nukkit-1.2.1.jar # Путь к собранному JAR-файлу
+          asset_name: tg2nukkit-${{ github.event.release.tag_name }}.jar # Имя файла в релизе
+          asset_content_type: application/java-archive
