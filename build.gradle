@@ -42,8 +42,8 @@ publishing {
         maven {
             url = 'https://maven.pkg.github.com/kamikarus/TG2Nukkit'
             credentials {
-                username = System.getenv("GITHUB_ACTOR")
-                password = System.getenv("GITHUB_TOKEN")
+                username = System.getenv("KamikaRus")
+                password = System.getenv("GH_PAT")
             }
         }
     }
