@@ -28,12 +28,6 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew build
 
-      - name: Publish to GitHub Packages
-        run: ./gradlew publish --stacktrace
-        env:
-          GITHUB_ACTOR: ${{ github.actor }} # Имя пользователя GitHub
-          GH_PAT: ${{ secrets.GH_PAT }} # Используем PAT
-
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
         with:
