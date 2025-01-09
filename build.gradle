@@ -23,6 +23,7 @@ dependencies {
     compileOnly 'cn.nukkit:nukkit:1.0-SNAPSHOT' // provided scope в Maven
     implementation 'org.telegram:telegrambots:6.5.0'
     implementation 'org.json:json:20231013'
+    implementation 'com.debianrose:tg2nukkit:1.2.1'
 }
 
 java {
@@ -38,13 +39,12 @@ publishing {
             version = project.version
         }
     }
-    repositories {
-        maven {
-            url = 'https://maven.pkg.github.com/kamikarus/TG2Nukkit'
-            credentials {
-                username = System.getenv("GITHUB_ACTOR")
-                password = System.getenv("GITHUB_TOKEN")
-            }
+repositories {
+    maven {
+        url = 'https://maven.pkg.github.com/kamikarus/TG2Nukkit'
+        credentials {
+            username = System.getenv("GITHUB_ACTOR") // Имя пользователя GitHub
+            password = System.getenv("GH_PAT") // Используем PAT
         }
     }
 }
