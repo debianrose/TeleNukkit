@@ -1,12 +1,19 @@
-# Config Version - 2
+# Config Version - 3
 telegram:
-
   botToken: "TELEGRAM_BOT_TOKEN"
+
+matrix:
+  homeserver: "https://matrix.org"
+  username: "@bot:matrix.org"
+  password: "password"
+  roomId: "!roomId:matrix.org"
 
 # supports: en, ru, ua, kz, es, ar
 language: "en"
 
 telegram-to-minecraft-format: "[TG] {sender}: {message}"
 minecraft-to-telegram-format: "[MC] {sender}: {message}"
+matrix-to-minecraft-format: "[MX] {sender}: {message}"
+minecraft-to-matrix-format: "[MC] {sender}: {message}"
 
 check-for-updates: true

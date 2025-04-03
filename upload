@@ -28,7 +28,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Загрузка JAR-файла в релиз..."
-gh release upload $VERSION build/libs/tg2nukkit-$VERSION.jar
+gh release upload $VERSION build/libs/telenukkit-$VERSION.jar
 
 if [ $? -ne 0 ]; then
   echo "Ошибка: Не удалось загрузить JAR-файл в релиз."

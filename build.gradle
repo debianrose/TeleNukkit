@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'com.debianrose'
-version '1.2.2'
+version '1.0.0'
 
 sourceCompatibility = 17
 targetCompatibility = 17
@@ -23,13 +23,14 @@ dependencies {
     compileOnly 'cn.nukkit:nukkit:1.0-SNAPSHOT'
     implementation 'org.telegram:telegrambots:6.5.0'
     implementation 'org.json:json:20231013'
+    implementation 'org.matrix.androidsdk:matrix-sdk:1.5.0'
 }
 
 shadowJar {
     archiveClassifier.set('')
     mergeServiceFiles()
     manifest {
-        attributes 'Main-Class': 'com.debianrose.Main'
+        attributes 'Main-Class': 'com.debianrose.TeleNukkit.Main'
     }
 }
 
