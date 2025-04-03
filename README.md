@@ -1,5 +1,7 @@
-# TG2Nukkit
-Readme Under Construction (womp womp)
+# TeleNukkit
+Simple Nukkit Bridge
 
-## Links
-[My Chat](https://t.me/+7Ux-46MkSoRlOTcy)
+## Support Messengers:
+[Telegram](t.me)
+And
+[Matrix](matrix.org)
