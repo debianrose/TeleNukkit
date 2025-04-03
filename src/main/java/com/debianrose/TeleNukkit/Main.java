@@ -14,23 +14,15 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
-import org.json.JSONObject;
-import org.matrix.androidsdk.MXDataHandler;
-import org.matrix.androidsdk.MXSession;
-import org.matrix.androidsdk.data.Room;
-import org.matrix.androidsdk.listeners.MXEventListener;
-import org.matrix.androidsdk.rest.model.Event;
-import org.matrix.androidsdk.rest.model.Message;
+import com.cosium.matrix_communication_client.*;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class Main extends PluginBase implements Listener {
-    private static final String GITHUB_REPO = "debianrose/TeleNukkit";
     private BridgeManager bridgeManager;
     private String language;
     private Map<String, LanguagePack> languages;
-    private boolean checkUpdates;
 
     @Override
     public void onEnable() {
@@ -38,16 +30,19 @@ public class Main extends PluginBase implements Listener {
         reloadConfig();
         
         initLanguages();
-        
         language = getConfig().getString("language", "en");
-        checkUpdates = getConfig().getBoolean("check-for-updates", true);
         
-        bridgeManager = new BridgeManager(this);
-        
-        getServer().getPluginManager().registerEvents(this, this);
-        
-        if (checkUpdates) {
-            new UpdateChecker(this).check();
+        try {
+            bridgeManager = new BridgeManager(this);
+            getServer().getPluginManager().registerEvents(this, this);
+            
+            if (getConfig().getBoolean("check-for-updates", true)) {
+                new UpdateChecker(this).check();
+            }
+            
+            getLogger().info("TeleNukkit успешно запущен!");
+        } catch (Exception e) {
+            getLogger().error("Ошибка при запуске плагина", e);
         }
     }
 
@@ -92,27 +87,14 @@ public class Main extends PluginBase implements Listener {
         return false;
     }
 
-    public String getLanguage() {
-        return language;
-    }
+    public String getLanguage() { return language; }
+    public LanguagePack getLanguagePack() { return languages.get(language); }
+    public BridgeManager getBridgeManager() { return bridgeManager; }
 
-    public LanguagePack getLanguagePack() {
-        return languages.get(language);
-    }
-
-    public BridgeManager getBridgeManager() {
-        return bridgeManager;
-    }
-
-    private static class LanguagePack {
-        public final String online;
-        public final String join;
-        public final String quit;
-
+    static class LanguagePack {
+        public final String online, join, quit;
         public LanguagePack(String online, String join, String quit) {
-            this.online = online;
-            this.join = join;
-            this.quit = quit;
+            this.online = online; this.join = join; this.quit = quit;
         }
     }
 }
@@ -122,7 +104,7 @@ class BridgeManager {
     private TelegramBridge telegramBridge;
     private MatrixBridge matrixBridge;
     
-    public BridgeManager(Main plugin) {
+    public BridgeManager(Main plugin) throws Exception {
         this.plugin = plugin;
         
         String telegramToken = plugin.getConfig().getString("telegram.botToken");
@@ -130,33 +112,30 @@ class BridgeManager {
             telegramBridge = new TelegramBridge(plugin, telegramToken);
         }
         
-        JSONObject matrixConfig = plugin.getConfig().getObject("matrix");
-        if (matrixConfig != null) {
-            matrixBridge = new MatrixBridge(plugin, matrixConfig);
+        if (plugin.getConfig().exists("matrix")) {
+            matrixBridge = new MatrixBridge(
+                plugin,
+                plugin.getConfig().getString("matrix.homeserver"),
+                plugin.getConfig().getString("matrix.username"),
+                plugin.getConfig().getString("matrix.password"),
+                plugin.getConfig().getString("matrix.roomId")
+            );
         }
     }
     
     public void sendToBridges(String source, String sender, String message) {
         String format = plugin.getConfig().getString(source + "-to-bridge-format", 
             "[" + source.toUpperCase() + "] {sender}: {message}");
-        
         String formatted = format.replace("{sender}", sender).replace("{message}", message);
         
-        if (telegramBridge != null) {
-            telegramBridge.sendMessage(formatted);
-        }
-        
-        if (matrixBridge != null) {
-            matrixBridge.sendMessage(formatted);
-        }
+        if (telegramBridge != null) telegramBridge.sendMessage(formatted);
+        if (matrixBridge != null) matrixBridge.sendMessage(formatted);
     }
     
     public void sendToMinecraft(String source, String sender, String message) {
         String format = plugin.getConfig().getString(source + "-to-minecraft-format", 
             "[" + source.toUpperCase() + "] {sender}: {message}");
-        
-        String formatted = format.replace("{sender}", sender).replace("{message}", message);
-        plugin.getServer().broadcastMessage(formatted);
+        plugin.getServer().broadcastMessage(format.replace("{sender}", sender).replace("{message}", message));
     }
 }
 
@@ -164,18 +143,15 @@ class TelegramBridge extends TelegramLongPollingBot {
     private final Main plugin;
     private final String token;
     
-    public TelegramBridge(Main plugin, String token) {
+    public TelegramBridge(Main plugin, String token) throws Exception {
         this.plugin = plugin;
         this.token = token;
-        
-        try {
-            TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
-            botsApi.registerBot(this);
-            plugin.getLogger().info("Telegram bot connected successfully!");
-        } catch (TelegramApiException e) {
-            plugin.getLogger().error("Failed to initialize Telegram bot", e);
-        }
+        new TelegramBotsApi(DefaultBotSession.class).registerBot(this);
+        plugin.getLogger().info("Telegram бот подключен!");
     }
+    
+    @Override public String getBotUsername() { return "TeleNukkitBot"; }
+    @Override public String getBotToken() { return token; }
     
     @Override
     public void onUpdateReceived(Update update) {
@@ -191,83 +167,50 @@ class TelegramBridge extends TelegramLongPollingBot {
         }
     }
     
-    @Override
-    public String getBotUsername() {
-        return "TeleNukkitBot";
-    }
-    
-    @Override
-    public String getBotToken() {
-        return token;
-    }
-    
     public void sendMessage(String message) {
         try {
             execute(new SendMessage("@your_channel", message));
         } catch (TelegramApiException e) {
-            plugin.getLogger().error("Failed to send Telegram message", e);
+            plugin.getLogger().error("Ошибка отправки в Telegram", e);
         }
     }
 }
 
 class MatrixBridge {
     private final Main plugin;
-    private MXSession session;
+    private final MatrixResources matrix;
+    private final RoomResource room;
     
-    public MatrixBridge(Main plugin, JSONObject config) {
+    public MatrixBridge(Main plugin, String homeserver, String username, String password, String roomId) throws Exception {
         this.plugin = plugin;
         
-        try {
-            String homeserver = config.getString("homeserver");
-            String username = config.getString("username");
-            String password = config.getString("password");
-            String roomId = config.getString("roomId");
-            
-            MXDataHandler dataHandler = new MXDataHandler();
-            session = new MXSession(dataHandler, homeserver);
-            session.login(username, password, new MXEventListener() {
-                @Override
-                public void onLogin() {
-                    plugin.getLogger().info("Connected to Matrix server!");
-                    
-                    Room room = session.getDataHandler().getRoom(roomId);
-                    room.addEventListener(new MXEventListener() {
-                        @Override
-                        public void onLiveEvent(Event event, RoomState state) {
-                            if (event.getType().equals(Event.EVENT_TYPE_MESSAGE)) {
-                                Message message = JsonUtils.toMessage(event.getContent());
-                                String sender = event.getSender();
-                                plugin.getBridgeManager().sendToMinecraft("matrix", sender, message.body);
-                            }
-                        }
-                    });
-                }
-            });
-        } catch (Exception e) {
-            plugin.getLogger().error("Failed to initialize Matrix bridge", e);
-        }
+        this.matrix = MatrixResources.factory()
+            .builder()
+            .https()
+            .hostname(homeserver)
+            .defaultPort()
+            .usernamePassword(username, password)
+            .build();
+        
+        this.room = matrix.rooms().byId(roomId);
+        
+        plugin.getLogger().info("Matrix бот подключен к комнате: " + roomId);
     }
     
     public void sendMessage(String message) {
-        if (session != null && session.isAlive()) {
-            try {
-                Room room = session.getDataHandler().getRoom("@your_room:matrix.org");
-                room.sendTextMessage(message);
-            } catch (Exception e) {
-                plugin.getLogger().error("Failed to send Matrix message", e);
-            }
+        try {
+            room.sendMessage(Message.builder()
+                .body(message)
+                .formattedBody("<b>" + message + "</b>")
+                .build());
+        } catch (Exception e) {
+            plugin.getLogger().error("Ошибка отправки в Matrix", e);
         }
     }
 }
 
 class UpdateChecker {
     private final Main plugin;
-    
-    public UpdateChecker(Main plugin) {
-        this.plugin = plugin;
-    }
-    
-    public void check() {
-        plugin.getLogger().info("Checking for updates...");
-    }
+    public UpdateChecker(Main plugin) { this.plugin = plugin; }
+    public void check() {}
 }

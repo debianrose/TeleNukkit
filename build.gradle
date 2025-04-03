@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'com.debianrose'
-version '1.0.0'
+version '1.0.0' 
 
 sourceCompatibility = 17
 targetCompatibility = 17
@@ -17,13 +17,17 @@ repositories {
     maven {
         url 'https://repo.opencollab.dev/maven-snapshots/'
     }
+    // Добавляем репозиторий для Matrix клиента
+    maven {
+        url 'https://gitlab.com/api/v4/projects/26758973/packages/maven'
+    }
 }
 
 dependencies {
     compileOnly 'cn.nukkit:nukkit:1.0-SNAPSHOT'
     implementation 'org.telegram:telegrambots:6.5.0'
     implementation 'org.json:json:20231013'
-    implementation 'org.matrix.androidsdk:matrix-sdk:1.5.0'
+    implementation 'com.cosium.matrix_communication_client:matrix-communication-client:1.9'
 }
 
 shadowJar {

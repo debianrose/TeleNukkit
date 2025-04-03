@@ -1,11 +1,11 @@
-# Config Version - 3
+# Config Version - 2.1
 telegram:
   botToken: "TELEGRAM_BOT_TOKEN"
 
 matrix:
   homeserver: "https://matrix.org"
-  username: "@bot:matrix.org"
-  password: "password"
+  username: "your_bot_username"
+  password: "your_password"
   roomId: "!roomId:matrix.org"
 
 # supports: en, ru, ua, kz, es, ar
