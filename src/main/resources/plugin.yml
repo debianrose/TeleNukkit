@@ -1,5 +1,5 @@
 name: TeleNukkit
-version: 1.0.0
+version: 1.0.1
 main: com.debianrose.TeleNukkit.Main
 api: ["1.0.0"]
 author: debianrose
@@ -7,7 +7,7 @@ description: Bridge Between Telegram/Matrix And Nukkit
 commands:
   setlanguage:
     description: Change the plugin language.
-    usage: /setlanguage <ru|en|es|ua|kz|ar>
+    usage: /setlanguage <ru|en>
     permission: op
 permissions:
   telegrambridge.setlanguage:
