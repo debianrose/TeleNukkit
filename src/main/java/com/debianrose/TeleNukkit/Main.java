@@ -315,7 +315,7 @@ class TelegramBridge extends TelegramLongPollingBot {
         Message message = update.getMessage();
         Chat chat = message.getChat();
         
-        if ((chat.isGroupChat() || chat.isSuperGroupChat()) {
+        if (chat.isGroupChat() || chat.isSuperGroupChat()) {
             if (activeGroupChatId == null) {
                 activeGroupChatId = chat.getId().toString();
                 plugin.getLogger().info(plugin.getMessage("telegram.group_detected") + chat.getTitle());
