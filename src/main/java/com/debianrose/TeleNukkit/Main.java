@@ -322,14 +322,14 @@ class TelegramBridge extends TelegramLongPollingBot {
                 sendMessage(activeGroupChatId, plugin.getMessage("plugin.enabled"));
                 return;
             }
-            
+
             if (!chat.getId().toString().equals(activeGroupChatId)) {
                 return;
             }
-            
+
             String text = message.getText();
             String sender = message.getFrom().getUserName();
-            
+
             if (text.equalsIgnoreCase("/online")) {
                 sendMessage(activeGroupChatId, 
                     plugin.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
