@@ -16,7 +16,9 @@ import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
-import com.cosium.matrix_communication_client.*;
+import org.json.JSONObject;
+import okhttp3.*;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -25,6 +27,14 @@ public class Main extends PluginBase implements Listener {
     private String language;
     private Map<String, LanguagePack> languages;
     private boolean setupCompleted;
+
+    public LanguagePack getLanguagePack() {
+        return languages.get(language);
+    }
+    
+    public BridgeManager getBridgeManager() {
+        return bridgeManager;
+    }
 
     @Override
     public void onEnable() {
@@ -40,7 +50,7 @@ public class Main extends PluginBase implements Listener {
                 (getConfig().getString("telegram.botToken", "").isEmpty() ? 
                 "NOT CONFIGURED" : "CONFIGURED"));
             getLogger().info("2. Matrix bot: " + 
-                (getConfig().getString("matrix.username", "").isEmpty() ? 
+                (getConfig().getString("matrix.accessToken", "").isEmpty() ? 
                 "NOT CONFIGURED" : "CONFIGURED"));
             getLogger().info("Edit config.yml and restart server");
             return;
@@ -146,8 +156,7 @@ class BridgeManager {
             matrixBridge = new MatrixBridge(
                 plugin,
                 plugin.getConfig().getString("matrix.homeserver"),
-                plugin.getConfig().getString("matrix.username"),
-                plugin.getConfig().getString("matrix.password"),
+                plugin.getConfig().getString("matrix.accessToken"),
                 plugin.getConfig().getString("matrix.roomId")
             );
         }
@@ -160,6 +169,12 @@ class BridgeManager {
         
         if (telegramBridge != null) telegramBridge.sendMessage(formatted);
         if (matrixBridge != null) matrixBridge.sendMessage(formatted);
+    }
+    
+    public void sendToMinecraft(String source, String sender, String message) {
+        String format = plugin.getConfig().getString("formats." + source + "-to-minecraft-format", 
+            "[" + source.toUpperCase() + "] {sender}: {message}");
+        plugin.getServer().broadcastMessage(format.replace("{sender}", sender).replace("{message}", message));
     }
 }
 
@@ -222,20 +237,44 @@ class TelegramBridge extends TelegramLongPollingBot {
 }
 
 class MatrixBridge {
-    private final RoomResource room;
+    private final Main plugin;
+    private final String homeserver;
+    private final String accessToken;
+    private final String roomId;
+    private final OkHttpClient httpClient = new OkHttpClient();
     
-    public MatrixBridge(Main plugin, String homeserver, String username, String password, String roomId) throws Exception {
-        MatrixResources matrix = MatrixResources.factory()
-            .builder()
-            .https()
-            .hostname(homeserver)
-            .defaultPort()
-            .usernamePassword(username, password)
-            .build();
-        this.room = matrix.rooms().byId(roomId);
+    public MatrixBridge(Main plugin, String homeserver, String accessToken, String roomId) {
+        this.plugin = plugin;
+        this.homeserver = homeserver;
+        this.accessToken = accessToken;
+        this.roomId = roomId;
     }
     
     public void sendMessage(String message) {
-        room.sendMessage(new Message(message));
+        try {
+            JSONObject body = new JSONObject()
+                .put("msgtype", "m.text")
+                .put("body", message);
+            
+            Request request = new Request.Builder()
+                .url(homeserver + "/_matrix/client/r0/rooms/" + roomId + "/send/m.room.message?access_token=" + accessToken)
+                .post(RequestBody.create(body.toString(), MediaType.get("application/json")))
+                .build();
+            
+            httpClient.newCall(request).enqueue(new Callback() {
+                @Override public void onFailure(Call call, IOException e) {
+                    plugin.getLogger().error("Matrix message failed: " + e.getMessage());
+                }
+                
+                @Override public void onResponse(Call call, Response response) throws IOException {
+                    if (!response.isSuccessful()) {
+                        plugin.getLogger().error("Matrix message error: " + response.body().string());
+                    }
+                    response.close();
+                }
+            });
+        } catch (Exception e) {
+            plugin.getLogger().error("Matrix send error", e);
+        }
     }
 }

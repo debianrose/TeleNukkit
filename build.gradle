@@ -27,7 +27,7 @@ dependencies {
     compileOnly 'cn.nukkit:nukkit:1.0-SNAPSHOT'
     implementation 'org.telegram:telegrambots:6.5.0'
     implementation 'org.json:json:20231013'
-    implementation 'com.cosium.matrix_communication_client:matrix-communication-client:1.9'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }
 
 shadowJar {

@@ -5,10 +5,9 @@ telegram:
 
 matrix:
   enabled: true
-  homeserver: "matrix.example.org"
-  username: "your_bot_username"
-  password: "your_bot_password"
-  roomId: "!your_room_id:matrix.example.org"
+  homeserver: "https://matrix.example.org"
+  accessToken: "YOUR_MATRIX_ACCESS_TOKEN"
+  roomId: "!ROOM_ID:matrix.org"
 # languages: en, ru
 language: "en"
 formats:
