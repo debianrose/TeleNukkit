@@ -1,4 +1,4 @@
-# Config Version - 2.2
+# Config Version - 2.2.1
 telegram:
   enabled: true
   botToken: "YOUR_TELEGRAM_BOT_TOKEN"
@@ -9,7 +9,7 @@ matrix:
   username: "your_bot_username"
   password: "your_bot_password"
   roomId: "!your_room_id:matrix.example.org"
-
+# languages: en, ru
 language: "en"
 formats:
   telegram-to-minecraft: "[TG] {sender}: {message}"
