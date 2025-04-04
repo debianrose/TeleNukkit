@@ -180,6 +180,14 @@ class TelegramBridge extends TelegramLongPollingBot {
     @Override 
     public String getBotToken() { return token; }
     
+    private void sendToChat(String chatId, String message) {
+        try {
+            execute(new SendMessage(chatId, message));
+        } catch (TelegramApiException e) {
+            plugin.getLogger().error("Error sending to Telegram", e);
+        }
+    }
+    
     @Override
     public void onUpdateReceived(Update update) {
         if (!update.hasMessage() || !update.getMessage().hasText()) return;
@@ -190,7 +198,7 @@ class TelegramBridge extends TelegramLongPollingBot {
         if (chat.isGroupChat() || chat.isSuperGroupChat()) {
             if (activeGroupChatId == null) {
                 activeGroupChatId = chat.getId().toString();
-                sendMessage("Bot activated in this group!");
+                sendToChat(activeGroupChatId, "Bot activated in this group!");
                 return;
             }
             
@@ -198,7 +206,8 @@ class TelegramBridge extends TelegramLongPollingBot {
             String sender = message.getFrom().getUserName();
             
             if (text.equalsIgnoreCase("/online")) {
-                sendMessage(plugin.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
+                sendToChat(activeGroupChatId, 
+                    plugin.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
             } else {
                 plugin.getBridgeManager().sendToMinecraft("telegram", sender, text);
             }
@@ -206,11 +215,8 @@ class TelegramBridge extends TelegramLongPollingBot {
     }
     
     public void sendMessage(String message) {
-        if (activeGroupChatId == null) return;
-        try {
-            execute(new SendMessage(activeGroupChatId, message));
-        } catch (TelegramApiException e) {
-            plugin.getLogger().error("Error sending to Telegram", e);
+        if (activeGroupChatId != null) {
+            sendToChat(activeGroupChatId, message);
         }
     }
 }
