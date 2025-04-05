@@ -1,10 +1,11 @@
 plugins {
     id 'java'
     id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'com.github.breadmoirai.github-release' version '2.4.1' // Плагин для работы с GitHub Releases
 }
 
 group 'com.debianrose'
-version '1.0.1'
+version '1.3.0'
 
 sourceCompatibility = 17
 targetCompatibility = 17
@@ -16,10 +17,6 @@ repositories {
     }
     maven {
         url 'https://repo.opencollab.dev/maven-snapshots/'
-    }
-    // Добавляем репозиторий для Matrix клиента
-    maven {
-        url 'https://gitlab.com/api/v4/projects/26758973/packages/maven'
     }
 }
 
@@ -38,6 +35,15 @@ shadowJar {
     }
 }
 
-tasks.withType(JavaCompile) {
-    options.encoding = 'UTF-8'
+githubRelease {
+    token = System.getenv("GITHUB_TOKEN")
+    owner = "debianrose"
+    repo = "telenukkit"
+    tagName = "v${version}"
+    releaseName = "v${version}"
+    targetCommitish = "main"
+    body = file("CHANGELOG.md").text
+    releaseAssets = [shadowJar.outputs.files.singleFile]
+    overwrite = true
+    dryRun = false
 }
