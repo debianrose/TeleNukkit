@@ -1,17 +1,14 @@
-name: Plugin Publish
+name: Create Release
 
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - '*'
 
 jobs:
-  build-and-publish:
+  build-and-release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -21,22 +18,18 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: 'gradle'
         
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4.0.0
+    - name: Build with Gradle
+      run: ./gradlew shadowJar
+      
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
       with:
-        cache-read-only: false
-        
-    - name: Build and publish
-      run: |
-        ./gradlew shadowJar publish
+        name: "TeleNukkit ${{ github.ref_name }}"
+        body: "Built from ${{ github.sha }}"
+        files: |
+          build/libs/TeleNukkit-*.jar
+        draft: false
+        prerelease: false
       env:
-        GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: TeleNukkit-${{ github.ref_name }}
-        path: build/libs/TeleNukkit-*.jar
