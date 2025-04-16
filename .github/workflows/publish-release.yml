@@ -1,4 +1,4 @@
-name: Publish Jar to Release
+name: Building
 
 on:
   workflow_dispatch:
