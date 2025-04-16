@@ -1,0 +1,52 @@
+name: Publish Jar to Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: 'gradle'
+
+    - name: Building!
+      run: ./gradlew shadowJar
+
+    - name: Get release tag
+      id: get-release-tag
+      run: |
+        echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      if: startsWith(github.ref, 'refs/tags/')
+      
+    - name: Create Release
+      id: create-release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name || steps.get-release-tag.outputs.RELEASE_TAG || 'untagged' }}
+        release_name: Release ${{ github.ref_name || steps.get-release-tag.outputs.RELEASE_TAG || 'untagged' }}
+        draft: true
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create-release.outputs.upload_url }}
+        asset_path: target/tn-1.0.1.jar 
+        asset_name: tn-1.0.1.jar
+        asset_content_type: application/java-archive
