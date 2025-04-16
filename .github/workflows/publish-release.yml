@@ -21,32 +21,51 @@ jobs:
         distribution: 'temurin'
         cache: 'gradle'
 
-    - name: Building!
+    - name: Build with Gradle
       run: ./gradlew shadowJar
 
-    - name: Get release tag
-      id: get-release-tag
-      run: |
-        echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+    - name: Create Release (only for tags)
       if: startsWith(github.ref, 'refs/tags/')
-      
-    - name: Create Release
       id: create-release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ github.ref_name || steps.get-release-tag.outputs.RELEASE_TAG || 'untagged' }}
-        release_name: Release ${{ github.ref_name || steps.get-release-tag.outputs.RELEASE_TAG || 'untagged' }}
-        draft: true
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
+        draft: false
         prerelease: false
 
-    - name: Upload Release Asset
+    - name: Upload Release Asset (for tags)
+      if: startsWith(github.ref, 'refs/tags/')
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create-release.outputs.upload_url }}
-        asset_path: target/tn-1.0.1.jar 
-        asset_name: tn-1.0.1.jar
+        asset_path: build/libs/tn-1.0.1.jar
+        asset_name: tn-${{ github.ref_name }}.jar
+        asset_content_type: application/java-archive
+
+    - name: Create Draft Release (manual trigger)
+      if: github.event_name == 'workflow_dispatch'
+      id: create-draft-release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: manual-${{ github.run_id }}
+        release_name: Manual Release (${{ github.run_id }})
+        draft: true
+        prerelease: false
+
+    - name: Upload Asset (manual trigger)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create-draft-release.outputs.upload_url }}
+        asset_path: build/libs/tn-1.0.1.jar
+        asset_name: tn-manual-${{ github.run_id }}.jar
         asset_content_type: application/java-archive
