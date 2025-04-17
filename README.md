@@ -6,4 +6,4 @@
 
 [**Matrix**](matrix.org)
 
-[**Discord**](discord.com) 
+[**Discord**](discord.com) (will be added in 1.0.2)
