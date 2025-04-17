@@ -26,12 +26,11 @@ public class Main extends PluginBase implements Listener {
     private BridgeManager bridgeManager;
     private String language;
     private Map<String, LanguagePack> languages;
-    private boolean setupCompleted;
 
     public LanguagePack getLanguagePack() {
         return languages.get(language);
     }
-    
+
     public BridgeManager getBridgeManager() {
         return bridgeManager;
     }
@@ -42,17 +41,14 @@ public class Main extends PluginBase implements Listener {
         reloadConfig();
         initLanguages();
         language = getConfig().getString("language", "en");
-        setupCompleted = !getConfig().getBoolean("settings.first-run-setup", true);
 
-        if (!setupCompleted) {
-            getLogger().info("========== Initial Setup ==========");
-            getLogger().info("1. Telegram bot: " + 
-                (getConfig().getString("telegram.botToken", "").isEmpty() ? 
-                "NOT CONFIGURED" : "CONFIGURED"));
-            getLogger().info("2. Matrix bot: " + 
-                (getConfig().getString("matrix.accessToken", "").isEmpty() ? 
-                "NOT CONFIGURED" : "CONFIGURED"));
-            getLogger().info("Edit config.yml and restart server");
+        if (getConfig().getBoolean("first-run", true)) {
+            getLogger().info(" ");
+            getLogger().info("§e=== TeleNukkit First-Time Setup ===");
+            getLogger().info("§aPlease run these commands in console:");
+            getLogger().info("§b/telesetup telegram <botToken>");
+            getLogger().info("§b/telesetup matrix <homeserver> <accessToken> <roomId>");
+            getLogger().info(" ");
             return;
         }
 
@@ -96,30 +92,45 @@ public class Main extends PluginBase implements Listener {
     }
 
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        switch (command.getName().toLowerCase()) {
-            case "setlanguage":
-                if (args.length == 1 && languages.containsKey(args[0])) {
-                    language = args[0];
-                    getConfig().set("language", args[0]);
-                    saveConfig();
-                    sender.sendMessage("Language set to " + args[0]);
-                    return true;
-                }
-                sender.sendMessage("Usage: /setlanguage <ru|en>");
+    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+        if (cmd.getName().equalsIgnoreCase("telesetup")) {
+            if (args.length < 2) {
+                sender.sendMessage("§cUsage: /telesetup <telegram|matrix> [settings]");
                 return true;
-                
-            case "togglebridge":
-                if (args.length == 1) {
-                    String bridgeName = args[0].toLowerCase();
-                    boolean currentState = getConfig().getBoolean(bridgeName + ".enabled", true);
-                    getConfig().set(bridgeName + ".enabled", !currentState);
-                    saveConfig();
-                    sender.sendMessage(bridgeName + " bridge " + (!currentState ? "ENABLED" : "DISABLED"));
+            }
+
+            String bridgeType = args[0].toLowerCase();
+            
+            switch (bridgeType) {
+                case "telegram":
+                    if (args.length != 2) {
+                        sender.sendMessage("§cUsage: /telesetup telegram <botToken>");
+                        return true;
+                    }
+                    getConfig().set("telegram.botToken", args[1]);
+                    sender.sendMessage("§aTelegram token set successfully!");
+                    break;
+                    
+                case "matrix":
+                    if (args.length != 4) {
+                        sender.sendMessage("§cUsage: /telesetup matrix <homeserver> <accessToken> <roomId>");
+                        return true;
+                    }
+                    getConfig().set("matrix.homeserver", args[1]);
+                    getConfig().set("matrix.accessToken", args[2]);
+                    getConfig().set("matrix.roomId", args[3]);
+                    sender.sendMessage("§aMatrix settings configured!");
+                    break;
+                    
+                default:
+                    sender.sendMessage("§cUnknown bridge type. Use 'telegram' or 'matrix'");
                     return true;
-                }
-                sender.sendMessage("Usage: /togglebridge <telegram|matrix>");
-                return true;
+            }
+            
+            getConfig().set("first-run", false);
+            saveConfig();
+            sender.sendMessage("§aRestart server to apply changes!");
+            return true;
         }
         return false;
     }
@@ -133,148 +144,6 @@ public class Main extends PluginBase implements Listener {
             this.online = messages.get("online");
             this.join = messages.get("join");
             this.quit = messages.get("quit");
-        }
-    }
-}
-
-class BridgeManager {
-    private final Main plugin;
-    private TelegramBridge telegramBridge;
-    private MatrixBridge matrixBridge;
-    
-    public BridgeManager(Main plugin) throws Exception {
-        this.plugin = plugin;
-        
-        if (plugin.getConfig().getBoolean("telegram.enabled", false)) {
-            String token = plugin.getConfig().getString("telegram.botToken");
-            if (token != null && !token.isEmpty()) {
-                telegramBridge = new TelegramBridge(plugin, token);
-            }
-        }
-        
-        if (plugin.getConfig().getBoolean("matrix.enabled", false)) {
-            matrixBridge = new MatrixBridge(
-                plugin,
-                plugin.getConfig().getString("matrix.homeserver"),
-                plugin.getConfig().getString("matrix.accessToken"),
-                plugin.getConfig().getString("matrix.roomId")
-            );
-        }
-    }
-    
-    public void sendToBridges(String source, String sender, String message) {
-        String format = plugin.getConfig().getString("formats." + source + "-to-bridge-format", 
-            "[" + source.toUpperCase() + "] {sender}: {message}");
-        String formatted = format.replace("{sender}", sender).replace("{message}", message);
-        
-        if (telegramBridge != null) telegramBridge.sendMessage(formatted);
-        if (matrixBridge != null) matrixBridge.sendMessage(formatted);
-    }
-    
-    public void sendToMinecraft(String source, String sender, String message) {
-        String format = plugin.getConfig().getString("formats." + source + "-to-minecraft-format", 
-            "[" + source.toUpperCase() + "] {sender}: {message}");
-        plugin.getServer().broadcastMessage(format.replace("{sender}", sender).replace("{message}", message));
-    }
-}
-
-class TelegramBridge extends TelegramLongPollingBot {
-    private final Main plugin;
-    private final String token;
-    private String activeGroupChatId;
-    
-    public TelegramBridge(Main plugin, String token) throws Exception {
-        this.plugin = plugin;
-        this.token = token;
-        new TelegramBotsApi(DefaultBotSession.class).registerBot(this);
-    }
-    
-    @Override 
-    public String getBotUsername() { return "TeleNukkitBot"; }
-    
-    @Override 
-    public String getBotToken() { return token; }
-    
-    private void sendToChat(String chatId, String message) {
-        try {
-            execute(new SendMessage(chatId, message));
-        } catch (TelegramApiException e) {
-            plugin.getLogger().error("Error sending to Telegram", e);
-        }
-    }
-    
-    @Override
-    public void onUpdateReceived(Update update) {
-        if (!update.hasMessage() || !update.getMessage().hasText()) return;
-        
-        Message message = update.getMessage();
-        Chat chat = message.getChat();
-        
-        if (chat.isGroupChat() || chat.isSuperGroupChat()) {
-            if (activeGroupChatId == null) {
-                activeGroupChatId = chat.getId().toString();
-                sendToChat(activeGroupChatId, "Bot activated in this group!");
-                return;
-            }
-            
-            String text = message.getText();
-            String sender = message.getFrom().getUserName();
-            
-            if (text.equalsIgnoreCase("/online")) {
-                sendToChat(activeGroupChatId, 
-                    plugin.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
-            } else {
-                plugin.getBridgeManager().sendToMinecraft("telegram", sender, text);
-            }
-        }
-    }
-    
-    public void sendMessage(String message) {
-        if (activeGroupChatId != null) {
-            sendToChat(activeGroupChatId, message);
-        }
-    }
-}
-
-class MatrixBridge {
-    private final Main plugin;
-    private final String homeserver;
-    private final String accessToken;
-    private final String roomId;
-    private final OkHttpClient httpClient = new OkHttpClient();
-    
-    public MatrixBridge(Main plugin, String homeserver, String accessToken, String roomId) {
-        this.plugin = plugin;
-        this.homeserver = homeserver;
-        this.accessToken = accessToken;
-        this.roomId = roomId;
-    }
-    
-    public void sendMessage(String message) {
-        try {
-            JSONObject body = new JSONObject()
-                .put("msgtype", "m.text")
-                .put("body", message);
-            
-            Request request = new Request.Builder()
-                .url(homeserver + "/_matrix/client/r0/rooms/" + roomId + "/send/m.room.message?access_token=" + accessToken)
-                .post(RequestBody.create(body.toString(), MediaType.get("application/json")))
-                .build();
-            
-            httpClient.newCall(request).enqueue(new Callback() {
-                @Override public void onFailure(Call call, IOException e) {
-                    plugin.getLogger().error("Matrix message failed: " + e.getMessage());
-                }
-                
-                @Override public void onResponse(Call call, Response response) throws IOException {
-                    if (!response.isSuccessful()) {
-                        plugin.getLogger().error("Matrix message error: " + response.body().string());
-                    }
-                    response.close();
-                }
-            });
-        } catch (Exception e) {
-            plugin.getLogger().error("Matrix send error", e);
         }
     }
 }
