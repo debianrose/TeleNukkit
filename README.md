@@ -4,6 +4,6 @@
 ## Support Messengers:
 [**Telegram**](t.me)
 
-[**Matrix**[(matrix.org)
+[**Matrix**](matrix.org)
 
 [**Discord**](discord.com) 
