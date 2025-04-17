@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'com.debianrose'
-version '1.0.1'
+version '1.0.1.1'
 
 sourceCompatibility = 17
 targetCompatibility = 17
