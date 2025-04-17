@@ -9,6 +9,8 @@ commands:
     description: Change the plugin language.
     usage: /setlanguage <ru|en>
     permission: op
+  telesetup:
+    description: First Setup!
 permissions:
   telegrambridge.setlanguage:
     description: Allows changing the plugin language.
