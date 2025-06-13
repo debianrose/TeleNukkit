@@ -8,12 +8,12 @@ matrix:
   homeserver: "https://matrix.example.org"
   accessToken: "YOUR_MATRIX_ACCESS_TOKEN"
   roomId: "!ROOM_ID:matrix.org"
-discord:
+discord: # indev!
   enabled: true
   token: "YOUR_TOKEN"
   channel_id: "YOUR_CHANNEL_ID" #NOT WORKED.
   
-# languages: en, ru, cn
+# languages: en, ru, zh, es, fr
 language: "en"
 formats:
   telegram-to-minecraft: "[TG] {sender}: {message}"
