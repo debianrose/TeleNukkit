@@ -43,7 +43,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create-release.outputs.upload_url }}
-        asset_path: build/libs/tn-1.0.1.1.jar
+        asset_path: build/libs/tn-1.0.1.2.jar
         asset_name: tn-${{ github.ref_name }}.jar
         asset_content_type: application/java-archive
 
