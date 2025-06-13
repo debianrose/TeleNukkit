@@ -1,5 +1,5 @@
 name: TeleNukkit
-version: 1.0.1.1
+version: 1.0.1.2a
 main: com.debianrose.TeleNukkit.Main
 api: ["1.0.0"]
 author: debianrose
