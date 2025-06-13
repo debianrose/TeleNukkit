@@ -171,6 +171,12 @@ public class Main extends PluginBase implements Listener {
         languages.put("en", new LanguagePack(en));
         Map<String, String> ru = Map.of("online", "Игроков онлайн: ", "join", " зашел на сервер!", "quit", " вышел с сервера!");
         languages.put("ru", new LanguagePack(ru));
+        Map<String, String> es = Map.of("online", "Jugadores en línea: ", "join", " se unió al juego!", "quit", " dejó el juego!");
+        languages.put("es", new LanguagePack(es));
+        Map<String, String> fr = Map.of("online", "Joueurs en ligne: ", "join", " a rejoint le jeu!", "quit", " a quitté le jeu!");
+        languages.put("fr", new LanguagePack(fr));
+        Map<String, String> zh = Map.of("online", "在线玩家: ", "join", " 加入了游戏!", "quit", " 离开了游戏!");
+        languages.put("zh", new LanguagePack(zh));
     }
 
     @EventHandler
