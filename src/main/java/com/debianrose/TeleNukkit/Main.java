@@ -57,13 +57,32 @@ public class Main extends PluginBase implements Listener {
                     plugin.getConfig().getString("discord.channel_id"));
         }
         
-        public void sendToBridges(String source, String sender, String message) {
-            String format = plugin.getConfig().getString("formats." + source + "-to-bridge-format",
-                "[" + source.toUpperCase() + "] {sender}: {message}");
+        public void sendToGame(String sender, String message) {
+            String format = plugin.getConfig().getString("formats.telegram-to-minecraft", "[TG] {sender}: {message}");
             String formatted = format.replace("{sender}", sender).replace("{message}", message);
-            if (telegramBridge != null) telegramBridge.sendMessage(formatted);
-            if (matrixBridge != null) matrixBridge.sendMessage(formatted);
-            if (discordBridge != null) discordBridge.sendMessage(formatted);
+            for (Player player : plugin.getServer().getOnlinePlayers().values()) {
+                player.sendMessage(formatted);
+            }
+        }
+        
+        public void sendToBridges(String source, String sender, String message) {
+            if (!source.equalsIgnoreCase("telegram")) {
+                String format = plugin.getConfig().getString("formats." + source + "-to-telegram", "[MC] {sender}: {message}");
+                String formatted = format.replace("{sender}", sender).replace("{message}", message);
+                if (telegramBridge != null) telegramBridge.sendMessage(formatted);
+            }
+            
+            if (!source.equalsIgnoreCase("matrix")) {
+                String format = plugin.getConfig().getString("formats." + source + "-to-matrix", "[MC] {sender}: {message}");
+                String formatted = format.replace("{sender}", sender).replace("{message}", message);
+                if (matrixBridge != null) matrixBridge.sendMessage(formatted);
+            }
+            
+            if (!source.equalsIgnoreCase("discord")) {
+                String format = plugin.getConfig().getString("formats." + source + "-to-discord", "[MC] {sender}: {message}");
+                String formatted = format.replace("{sender}", sender).replace("{message}", message);
+                if (discordBridge != null) discordBridge.sendMessage(formatted);
+            }
         }
         
         public void processLinkCommand(String messenger, String externalId, String code) {
@@ -75,6 +94,7 @@ public class Main extends PluginBase implements Listener {
         private final Main plugin;
         private final String token;
         private String activeGroupChatId;
+        private final Set<String> processedMessages = new HashSet<>();
         
         public TelegramBridge(Main plugin, String token) throws Exception {
             this.plugin = plugin;
@@ -97,6 +117,10 @@ public class Main extends PluginBase implements Listener {
             if (!update.hasMessage() || !update.getMessage().hasText()) return;
             
             Message message = update.getMessage();
+            String messageId = message.getMessageId().toString();
+            if (processedMessages.contains(messageId)) return;
+            processedMessages.add(messageId);
+            
             Chat chat = message.getChat();
             String text = message.getText();
             String sender = message.getFrom().getUserName();
@@ -116,10 +140,10 @@ public class Main extends PluginBase implements Listener {
                 
                 if (text.equalsIgnoreCase("/online")) {
                     sendToChat(activeGroupChatId, plugin.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
-                } else {
+                } else if (!text.startsWith("/")) {
                     String minecraftName = plugin.reverseLinks.get(sender);
-                    String displayName = minecraftName != null ? minecraftName : "[T] " + sender;
-                    plugin.getBridgeManager().sendToBridges("telegram", displayName, text);
+                    String displayName = minecraftName != null ? minecraftName : sender;
+                    plugin.getBridgeManager().sendToGame(displayName, text);
                 }
             }
         }
@@ -306,14 +330,22 @@ public class Main extends PluginBase implements Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        if (cmd.getName().equalsIgnoreCase("getlinkcode")) {
-            return handleGetLinkCode(sender);
-        } else if (cmd.getName().equalsIgnoreCase("unlinkaccount")) {
-            return handleUnlinkAccount(sender);
-        } else if (cmd.getName().equalsIgnoreCase("setprefix")) {
-            return handleSetPrefix(sender, args);
+        String commandName = cmd.getName().toLowerCase();
+        
+        switch (commandName) {
+            case "getlinkcode":
+            case "codelink":
+            case "getcodelink":
+                return handleGetLinkCode(sender);
+            case "unlinkaccount":
+                return handleUnlinkAccount(sender);
+            case "setprefix":
+                return handleSetPrefix(sender, args);
+            case "telesetup":
+                return handleTeleSetup(sender, args);
+            default:
+                return handleUnknownCommand(sender);
         }
-        return false;
     }
 
     private boolean handleGetLinkCode(CommandSender sender) {
@@ -377,6 +409,85 @@ public class Main extends PluginBase implements Listener {
         prefixCache.put(player.getName().toLowerCase(), prefix);
         
         player.sendMessage("§aYour prefix has been set: " + prefix);
+        return true;
+    }
+
+    private boolean handleTeleSetup(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("telenukkit.admin")) {
+            sender.sendMessage("§cYou don't have permission to use this command!");
+            return true;
+        }
+        
+        if (args.length < 1) {
+            sender.sendMessage("§eUsage: /telesetup <telegram|matrix|discord> [settings]");
+            return true;
+        }
+
+        String bridgeType = args[0].toLowerCase();
+        switch (bridgeType) {
+            case "telegram":
+                return setupTelegram(sender, args);
+            case "matrix":
+                return setupMatrix(sender, args);
+            case "discord":
+                return setupDiscord(sender, args);
+            default:
+                sender.sendMessage("§cUnknown bridge type. Available: telegram, matrix, discord");
+                return true;
+        }
+    }
+
+    private boolean setupTelegram(CommandSender sender, String[] args) {
+        if (args.length != 2) {
+            sender.sendMessage("§cUsage: /telesetup telegram <botToken>");
+            return true;
+        }
+        
+        getConfig().set("telegram.enabled", true);
+        getConfig().set("telegram.botToken", args[1]);
+        saveConfig();
+        
+        sender.sendMessage("§aTelegram token set successfully! Restart server to apply changes.");
+        return true;
+    }
+
+    private boolean setupMatrix(CommandSender sender, String[] args) {
+        if (args.length != 4) {
+            sender.sendMessage("§cUsage: /telesetup matrix <homeserver> <accessToken> <roomId>");
+            return true;
+        }
+        
+        getConfig().set("matrix.enabled", true);
+        getConfig().set("matrix.homeserver", args[1]);
+        getConfig().set("matrix.accessToken", args[2]);
+        getConfig().set("matrix.roomId", args[3]);
+        saveConfig();
+        
+        sender.sendMessage("§aMatrix settings configured! Restart server to apply changes.");
+        return true;
+    }
+
+    private boolean setupDiscord(CommandSender sender, String[] args) {
+        if (args.length != 3) {
+            sender.sendMessage("§cUsage: /telesetup discord <botToken> <channelId>");
+            return true;
+        }
+        
+        getConfig().set("discord.enabled", true);
+        getConfig().set("discord.token", args[1]);
+        getConfig().set("discord.channel_id", args[2]);
+        saveConfig();
+        
+        sender.sendMessage("§aDiscord settings configured! Restart server to apply changes.");
+        return true;
+    }
+
+    private boolean handleUnknownCommand(CommandSender sender) {
+        sender.sendMessage("§cUnknown command. Available commands:");
+        sender.sendMessage("§a/getlinkcode §7- Get account linking code");
+        sender.sendMessage("§a/linkcode §7- Alias for /getlinkcode");
+        sender.sendMessage("§a/unlinkaccount §7- Unlink your external account");
+        sender.sendMessage("§a/setprefix <prefix> §7- Set your chat prefix");
         return true;
     }
 

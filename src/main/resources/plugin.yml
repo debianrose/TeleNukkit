@@ -3,27 +3,30 @@ version: 1.0.1.2a
 main: com.debianrose.TeleNukkit.Main
 api: ["1.0.0"]
 author: debianrose
-description: Bridge Between Telegram/Matrix And Nukkit
+description: Bridge Between Telegram/Matrix/Discord And Nukkit
 commands:
-  telesetup:
-    description: Configure bridge settings
-    usage: /telesetup <telegram|matrix|discord> [settings]
-    permission: telenukkit.setup
+  getlinkcode:
+    description: Get a code to link your account
+    usage: /getlinkcode
+    aliases: [linkcode, codelink, getcodelink]
+    permission: telenukkit.user
+  unlinkaccount:
+    description: Unlink your external account
+    usage: /unlinkaccount
+    permission: telenukkit.user
   setprefix:
     description: Set your chat prefix
     usage: /setprefix <prefix>
-  linkaccount:
-    description: Link your external account
-    usage: /linkaccount <username>
-  setlanguage:
-    description: Change the plugin language
-    usage: /setlanguage <ru|en|es|fr|zh>
+    permission: telenukkit.user
+  telesetup:
+    description: Configure bridge settings
+    usage: /telesetup <telegram|matrix|discord> [settings]
     permission: telenukkit.admin
 
 permissions:
-  telenukkit.setup:
-    description: Allows configuring bridge settings
-    default: op
+  telenukkit.user:
+    description: Basic user permissions
+    default: true
   telenukkit.admin:
-    description: Allows admin commands
+    description: Admin permissions
     default: op
