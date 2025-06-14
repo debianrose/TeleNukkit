@@ -1,25 +1,39 @@
-# Config Version - 2.2.1
+# Config Version - 2.2.6
 telegram:
   enabled: true
   botToken: "YOUR_TELEGRAM_BOT_TOKEN"
+  account-linking: true
 
 matrix:
   enabled: true
   homeserver: "https://matrix.example.org"
   accessToken: "YOUR_MATRIX_ACCESS_TOKEN"
   roomId: "!ROOM_ID:matrix.org"
-discord: # indev!
+  account-linking: true
+
+discord:
   enabled: true
-  token: "YOUR_TOKEN"
-  channel_id: "YOUR_CHANNEL_ID" #NOT WORKED.
-  
-# languages: en, ru, zh, es, fr
+  token: "YOUR_DISCORD_BOT_TOKEN"
+  channel_id: "YOUR_CHANNEL_ID"
+  account-linking: true
+
+features:
+  account-linking: true
+  cross-chat: true
+  join-notifications: true
+  quit-notifications: true
+
+# Langs: en, ru, zh, es, fr
 language: "en"
+
 formats:
   telegram-to-minecraft: "[TG] {sender}: {message}"
   minecraft-to-telegram: "[MC] {sender}: {message}"
   matrix-to-minecraft: "[MX] {sender}: {message}"
   minecraft-to-matrix: "[MC] {sender}: {message}"
+  discord-to-minecraft: "[DS] {sender}: {message}"
+  minecraft-to-discord: "[MC] {sender}: {message}"
+  system-message: "[System] {message}"
 
 settings:
   check-for-updates: true
