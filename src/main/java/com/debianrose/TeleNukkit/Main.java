@@ -10,6 +10,7 @@ import cn.nukkit.event.EventHandler;
 import cn.nukkit.command.Command;
 import cn.nukkit.command.CommandSender;
 import cn.nukkit.utils.Config;
+import cn.nukkit.scheduler.AsyncTask;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -35,6 +36,8 @@ public class Main extends PluginBase implements Listener {
     private final HashMap<String, String> accountLinkCache = new HashMap<>();
     private final Map<String, String> linkCodes = new HashMap<>();
     private final Map<String, String> reverseLinks = new HashMap<>();
+    private boolean updateAvailable = false;
+    private String latestVersion = "";
 
     public class BridgeManager {
         private final Main plugin;
@@ -58,6 +61,8 @@ public class Main extends PluginBase implements Listener {
         }
         
         public void sendToGame(String sender, String message) {
+            if (!plugin.getConfig().getBoolean("features.cross-chat", true)) return;
+            
             String format = plugin.getConfig().getString("formats.telegram-to-minecraft", "[TG] {sender}: {message}");
             String formatted = format.replace("{sender}", sender).replace("{message}", message);
             for (Player player : plugin.getServer().getOnlinePlayers().values()) {
@@ -66,26 +71,30 @@ public class Main extends PluginBase implements Listener {
         }
         
         public void sendToBridges(String source, String sender, String message) {
-            if (!source.equalsIgnoreCase("telegram")) {
-                String format = plugin.getConfig().getString("formats." + source + "-to-telegram", "[MC] {sender}: {message}");
-                String formatted = format.replace("{sender}", sender).replace("{message}", message);
-                if (telegramBridge != null) telegramBridge.sendMessage(formatted);
+            String format = plugin.getConfig().getString("formats.system-message", "[System] {message}");
+            if (!source.equals("system")) {
+                format = plugin.getConfig().getString("formats." + source + "-to-bridge", "[{sender}] {message}");
             }
             
-            if (!source.equalsIgnoreCase("matrix")) {
-                String format = plugin.getConfig().getString("formats." + source + "-to-matrix", "[MC] {sender}: {message}");
-                String formatted = format.replace("{sender}", sender).replace("{message}", message);
-                if (matrixBridge != null) matrixBridge.sendMessage(formatted);
-            }
+            String formatted = format.replace("{sender}", sender).replace("{message}", message);
             
-            if (!source.equalsIgnoreCase("discord")) {
-                String format = plugin.getConfig().getString("formats." + source + "-to-discord", "[MC] {sender}: {message}");
-                String formatted = format.replace("{sender}", sender).replace("{message}", message);
-                if (discordBridge != null) discordBridge.sendMessage(formatted);
+            if (!source.equalsIgnoreCase("telegram") && telegramBridge != null) {
+                telegramBridge.sendMessage(formatted);
+            }
+            if (!source.equalsIgnoreCase("matrix") && matrixBridge != null) {
+                matrixBridge.sendMessage(formatted);
+            }
+            if (!source.equalsIgnoreCase("discord") && discordBridge != null) {
+                discordBridge.sendMessage(formatted);
             }
         }
         
         public void processLinkCommand(String messenger, String externalId, String code) {
+            if (!plugin.getConfig().getBoolean("features.account-linking", true) || 
+                !plugin.getConfig().getBoolean(messenger.toLowerCase() + ".account-linking", true)) {
+                sendToBridges(messenger, "System", "Account linking is currently disabled");
+                return;
+            }
             plugin.handleLinkCode(messenger, externalId, code);
         }
     }
@@ -225,12 +234,15 @@ public class Main extends PluginBase implements Listener {
         }
     }
 
-    public LanguagePack getLanguagePack() {
-        return languages.get(language);
-    }
-
-    public BridgeManager getBridgeManager() {
-        return bridgeManager;
+    static class LanguagePack {
+        public final String online;
+        public final String join;
+        public final String quit;
+        public LanguagePack(Map<String, String> messages) {
+            this.online = messages.get("online");
+            this.join = messages.get("join");
+            this.quit = messages.get("quit");
+        }
     }
 
     @Override
@@ -240,11 +252,20 @@ public class Main extends PluginBase implements Listener {
         initLanguages();
         loadDataFiles();
         language = getConfig().getString("language", "en");
-        
+
+        if (getConfig().getBoolean("settings.check-for-updates", true)) {
+            checkForUpdates();
+        }
+
         try {
             bridgeManager = new BridgeManager(this);
             getServer().getPluginManager().registerEvents(this, this);
             getLogger().info("TeleNukkit successfully enabled!");
+            if (updateAvailable) {
+                getLogger().info("§eUpdate available! Version " + latestVersion);
+                bridgeManager.sendToBridges("system", "Update Checker", 
+                    "New plugin update available: " + latestVersion);
+            }
         } catch (Exception e) {
             getLogger().error("Error while starting plugin", e);
         }
@@ -274,6 +295,31 @@ public class Main extends PluginBase implements Listener {
         }
     }
 
+    private void checkForUpdates() {
+        getServer().getScheduler().scheduleAsyncTask(this, new AsyncTask() {
+            @Override
+            public void onRun() {
+                OkHttpClient client = new OkHttpClient();
+                Request request = new Request.Builder()
+                    .url("https://api.github.com/repos/debianrose/TeleNukkit/releases/latest")
+                    .build();
+
+                try (Response response = client.newCall(request).execute()) {
+                    if (response.isSuccessful()) {
+                        JSONObject json = new JSONObject(response.body().string());
+                        latestVersion = json.getString("tag_name").replace("v", "");
+                        
+                        if (!getDescription().getVersion().equals(latestVersion)) {
+                            updateAvailable = true;
+                        }
+                    }
+                } catch (Exception e) {
+                    getLogger().error("Failed to check for updates: " + e.getMessage());
+                }
+            }
+        });
+    }
+
     @EventHandler
     public void onPlayerChat(PlayerChatEvent event) {
         Player player = event.getPlayer();
@@ -293,16 +339,16 @@ public class Main extends PluginBase implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        bridgeManager.sendToBridges("minecraft", event.getPlayer().getName(), languages.get(language).join);
+        if (getConfig().getBoolean("features.join-notifications", true)) {
+            bridgeManager.sendToBridges("minecraft", event.getPlayer().getName(), languages.get(language).join);
+        }
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        bridgeManager.sendToBridges("minecraft", event.getPlayer().getName(), languages.get(language).quit);
-    }
-
-    private String generateLinkCode() {
-        return String.format("%06d", ThreadLocalRandom.current().nextInt(0, 1000000));
+        if (getConfig().getBoolean("features.quit-notifications", true)) {
+            bridgeManager.sendToBridges("minecraft", event.getPlayer().getName(), languages.get(language).quit);
+        }
     }
 
     public void handleLinkCode(String messenger, String externalId, String code) {
@@ -321,7 +367,7 @@ public class Main extends PluginBase implements Listener {
         prefixes.save();
         prefixCache.put(playerName.toLowerCase(), "[" + messenger.toUpperCase() + "]");
         
-        bridgeManager.sendToBridges(messenger, "System", "Account linked successfully!");
+        bridgeManager.sendToBridges("system", "System", playerName + " linked their account to " + messenger);
         Player player = getServer().getPlayerExact(playerName);
         if (player != null) {
             player.sendMessage("§aYour account has been linked to " + messenger + "!");
@@ -330,86 +376,22 @@ public class Main extends PluginBase implements Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        String commandName = cmd.getName().toLowerCase();
-        
-        switch (commandName) {
+        switch (cmd.getName().toLowerCase()) {
+            case "telesetup":
+                return handleTeleSetup(sender, args);
             case "getlinkcode":
-            case "codelink":
+            case "linkcode":
             case "getcodelink":
                 return handleGetLinkCode(sender);
             case "unlinkaccount":
                 return handleUnlinkAccount(sender);
-            case "setprefix":
-                return handleSetPrefix(sender, args);
-            case "telesetup":
-                return handleTeleSetup(sender, args);
+            case "togglelinking":
+                return handleToggleLinking(sender, args);
+            case "checkupdate":
+                return handleCheckUpdate(sender);
             default:
                 return handleUnknownCommand(sender);
         }
-    }
-
-    private boolean handleGetLinkCode(CommandSender sender) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("§cThis command is for players only!");
-            return true;
-        }
-        
-        Player player = (Player) sender;
-        String code = generateLinkCode();
-        linkCodes.put(code, player.getName());
-        
-        getServer().getScheduler().scheduleDelayedTask(this, () -> {
-            linkCodes.remove(code);
-        }, 20 * 60 * 5);
-        
-        player.sendMessage("§aYour link code: §e" + code);
-        player.sendMessage("§aUse this code in Telegram with /link command");
-        return true;
-    }
-
-    private boolean handleUnlinkAccount(CommandSender sender) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("§cThis command is for players only!");
-            return true;
-        }
-        
-        Player player = (Player) sender;
-        String playerName = player.getName().toLowerCase();
-        
-        if (!accountLinks.exists(playerName)) {
-            player.sendMessage("§cYour account is not linked!");
-            return true;
-        }
-        
-        String externalId = accountLinks.getString(playerName);
-        accountLinks.remove(playerName);
-        accountLinks.save();
-        accountLinkCache.remove(playerName);
-        reverseLinks.remove(externalId);
-        
-        player.sendMessage("§aYour account has been unlinked!");
-        return true;
-    }
-
-    private boolean handleSetPrefix(CommandSender sender, String[] args) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("§cThis command is for players only!");
-            return true;
-        }
-        if (args.length == 0) {
-            sender.sendMessage("§cUsage: /setprefix <prefix>");
-            return true;
-        }
-        
-        Player player = (Player) sender;
-        String prefix = String.join(" ", args);
-        
-        prefixes.set(player.getName().toLowerCase(), prefix);
-        prefixes.save();
-        prefixCache.put(player.getName().toLowerCase(), prefix);
-        
-        player.sendMessage("§aYour prefix has been set: " + prefix);
-        return true;
     }
 
     private boolean handleTeleSetup(CommandSender sender, String[] args) {
@@ -419,7 +401,10 @@ public class Main extends PluginBase implements Listener {
         }
         
         if (args.length < 1) {
-            sender.sendMessage("§eUsage: /telesetup <telegram|matrix|discord> [settings]");
+            sender.sendMessage("§eUsage:");
+            sender.sendMessage("§b/telesetup telegram <botToken>");
+            sender.sendMessage("§b/telesetup matrix <homeserver> <accessToken> <roomId>");
+            sender.sendMessage("§b/telesetup discord <token> <channelId>");
             return true;
         }
 
@@ -447,7 +432,13 @@ public class Main extends PluginBase implements Listener {
         getConfig().set("telegram.botToken", args[1]);
         saveConfig();
         
-        sender.sendMessage("§aTelegram token set successfully! Restart server to apply changes.");
+        try {
+            bridgeManager = new BridgeManager(this);
+            sender.sendMessage("§aTelegram configured! Restart server to apply changes.");
+            bridgeManager.sendToBridges("system", "System", "Telegram bridge was configured");
+        } catch (Exception e) {
+            sender.sendMessage("§cError configuring Telegram: " + e.getMessage());
+        }
         return true;
     }
 
@@ -463,13 +454,19 @@ public class Main extends PluginBase implements Listener {
         getConfig().set("matrix.roomId", args[3]);
         saveConfig();
         
-        sender.sendMessage("§aMatrix settings configured! Restart server to apply changes.");
+        try {
+            bridgeManager = new BridgeManager(this);
+            sender.sendMessage("§aMatrix configured! Restart server to apply changes.");
+            bridgeManager.sendToBridges("system", "System", "Matrix bridge was configured");
+        } catch (Exception e) {
+            sender.sendMessage("§cError configuring Matrix: " + e.getMessage());
+        }
         return true;
     }
 
     private boolean setupDiscord(CommandSender sender, String[] args) {
         if (args.length != 3) {
-            sender.sendMessage("§cUsage: /telesetup discord <botToken> <channelId>");
+            sender.sendMessage("§cUsage: /telesetup discord <token> <channelId>");
             return true;
         }
         
@@ -478,17 +475,112 @@ public class Main extends PluginBase implements Listener {
         getConfig().set("discord.channel_id", args[2]);
         saveConfig();
         
-        sender.sendMessage("§aDiscord settings configured! Restart server to apply changes.");
+        try {
+            bridgeManager = new BridgeManager(this);
+            sender.sendMessage("§aDiscord configured! Restart server to apply changes.");
+            bridgeManager.sendToBridges("system", "System", "Discord bridge was configured");
+        } catch (Exception e) {
+            sender.sendMessage("§cError configuring Discord: " + e.getMessage());
+        }
+        return true;
+    }
+
+    private boolean handleGetLinkCode(CommandSender sender) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("§cThis command is for players only!");
+            return true;
+        }
+        
+        if (!getConfig().getBoolean("features.account-linking", true)) {
+            sender.sendMessage("§cAccount linking is currently disabled!");
+            return true;
+        }
+        
+        Player player = (Player) sender;
+        String code = generateLinkCode();
+        linkCodes.put(code, player.getName());
+        
+        getServer().getScheduler().scheduleDelayedTask(this, () -> {
+            linkCodes.remove(code);
+        }, 20 * 60 * 5);
+        
+        player.sendMessage("§aYour link code: §e" + code);
+        player.sendMessage("§aUse this code in your messaging app with /link command");
+        return true;
+    }
+
+    private boolean handleUnlinkAccount(CommandSender sender) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("§cThis command is for players only!");
+            return true;
+        }
+        
+        Player player = (Player) sender;
+        String playerName = player.getName().toLowerCase();
+        
+        if (!accountLinks.exists(playerName)) {
+            sender.sendMessage("§cYour account is not linked!");
+            return true;
+        }
+        
+        String externalId = accountLinks.getString(playerName);
+        accountLinks.remove(playerName);
+        accountLinks.save();
+        accountLinkCache.remove(playerName);
+        reverseLinks.remove(externalId);
+        prefixes.remove(playerName);
+        prefixes.save();
+        prefixCache.remove(playerName);
+        
+        sender.sendMessage("§aYour account has been unlinked!");
+        bridgeManager.sendToBridges("system", "System", player.getName() + " unlinked their account");
+        return true;
+    }
+
+    private boolean handleToggleLinking(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("telenukkit.admin")) {
+            sender.sendMessage("§cYou don't have permission to use this command!");
+            return true;
+        }
+        
+        if (args.length != 1) {
+            sender.sendMessage("§cUsage: /togglelinking <on|off>");
+            return true;
+        }
+        
+        boolean enable = args[0].equalsIgnoreCase("on");
+        getConfig().set("features.account-linking", enable);
+        saveConfig();
+        
+        String status = enable ? "§aenabled" : "§cdisabled";
+        sender.sendMessage("§7Account linking has been " + status);
+        bridgeManager.sendToBridges("system", "System", 
+            "Account linking has been " + (enable ? "enabled" : "disabled"));
+        return true;
+    }
+
+    private boolean handleCheckUpdate(CommandSender sender) {
+        if (updateAvailable) {
+            sender.sendMessage("§eUpdate available! Version " + latestVersion);
+            sender.sendMessage("§eDownload at: https://github.com/debianrose/TeleNukkit/releases");
+        } else {
+            sender.sendMessage("§aYou're using the latest version!");
+        }
         return true;
     }
 
     private boolean handleUnknownCommand(CommandSender sender) {
         sender.sendMessage("§cUnknown command. Available commands:");
         sender.sendMessage("§a/getlinkcode §7- Get account linking code");
-        sender.sendMessage("§a/linkcode §7- Alias for /getlinkcode");
-        sender.sendMessage("§a/unlinkaccount §7- Unlink your external account");
-        sender.sendMessage("§a/setprefix <prefix> §7- Set your chat prefix");
+        sender.sendMessage("§a/unlinkaccount §7- Unlink your account");
+        sender.sendMessage("§a/togglelinking §7- Toggle account linking (admin)");
+        sender.sendMessage("§a/checkupdate §7- Check for plugin updates");
+        sender.sendMessage("§a/telesetup §7- Configure bridges (admin)");
         return true;
+    }
+
+    private String generateLinkCode() {
+        return String.format("%06d", ThreadLocalRandom.current().nextInt(0, 1000000));
     }
 
     private String getPrefix(Player player) {
@@ -515,16 +607,5 @@ public class Main extends PluginBase implements Listener {
             return account;
         }
         return null;
-    }
-
-    static class LanguagePack {
-        public final String online;
-        public final String join;
-        public final String quit;
-        public LanguagePack(Map<String, String> messages) {
-            this.online = messages.get("online");
-            this.join = messages.get("join");
-            this.quit = messages.get("quit");
-        }
     }
 }
