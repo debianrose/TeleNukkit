@@ -5,13 +5,25 @@ api: ["1.0.0"]
 author: debianrose
 description: Bridge Between Telegram/Matrix And Nukkit
 commands:
-  setlanguage:
-    description: Change the plugin language.
-    usage: /setlanguage <ru|en>
-    permission: op
   telesetup:
-    description: First Setup!
+    description: Configure bridge settings
+    usage: /telesetup <telegram|matrix|discord> [settings]
+    permission: telenukkit.setup
+  setprefix:
+    description: Set your chat prefix
+    usage: /setprefix <prefix>
+  linkaccount:
+    description: Link your external account
+    usage: /linkaccount <username>
+  setlanguage:
+    description: Change the plugin language
+    usage: /setlanguage <ru|en|es|fr|zh>
+    permission: telenukkit.admin
+
 permissions:
-  telegrambridge.setlanguage:
-    description: Allows changing the plugin language.
+  telenukkit.setup:
+    description: Allows configuring bridge settings
+    default: op
+  telenukkit.admin:
+    description: Allows admin commands
     default: op
