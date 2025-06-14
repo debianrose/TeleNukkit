@@ -9,6 +9,7 @@ import cn.nukkit.event.player.PlayerQuitEvent;
 import cn.nukkit.event.EventHandler;
 import cn.nukkit.command.Command;
 import cn.nukkit.command.CommandSender;
+import cn.nukkit.utils.Config;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -198,6 +199,14 @@ public class Main extends PluginBase implements Listener {
                 plugin.getLogger().error("Discord send error", e);
             }
         }
+    }
+
+    public LanguagePack getLanguagePack() {
+        return languages.get(language);
+    }
+
+    public BridgeManager getBridgeManager() {
+        return bridgeManager;
     }
 
     @Override
