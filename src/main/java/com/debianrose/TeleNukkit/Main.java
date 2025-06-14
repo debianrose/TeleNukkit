@@ -31,16 +31,21 @@ public class Main extends PluginBase implements Listener {
         private final Main plugin;
         private TelegramBridge telegramBridge;
         private MatrixBridge matrixBridge;
+        private DiscordBridge discordBridge;
         
         public BridgeManager(Main plugin) throws Exception {
             this.plugin = plugin;
-            if (!plugin.getConfig().getString("telegram.botToken").isEmpty())
+            if (plugin.getConfig().getBoolean("telegram.enabled") && !plugin.getConfig().getString("telegram.botToken").isEmpty())
                 telegramBridge = new TelegramBridge(plugin, plugin.getConfig().getString("telegram.botToken"));
-            if (!plugin.getConfig().getString("matrix.accessToken").isEmpty())
+            if (plugin.getConfig().getBoolean("matrix.enabled") && !plugin.getConfig().getString("matrix.accessToken").isEmpty())
                 matrixBridge = new MatrixBridge(plugin,
                     plugin.getConfig().getString("matrix.homeserver"),
                     plugin.getConfig().getString("matrix.accessToken"),
                     plugin.getConfig().getString("matrix.roomId"));
+            if (plugin.getConfig().getBoolean("discord.enabled") && !plugin.getConfig().getString("discord.token").isEmpty())
+                discordBridge = new DiscordBridge(plugin,
+                    plugin.getConfig().getString("discord.token"),
+                    plugin.getConfig().getString("discord.channel_id"));
         }
         
         public void sendToBridges(String source, String sender, String message) {
@@ -49,6 +54,43 @@ public class Main extends PluginBase implements Listener {
             String formatted = format.replace("{sender}", sender).replace("{message}", message);
             if (telegramBridge != null) telegramBridge.sendMessage(formatted);
             if (matrixBridge != null) matrixBridge.sendMessage(formatted);
+            if (discordBridge != null) discordBridge.sendMessage(formatted);
+        }
+    }
+
+    public class DiscordBridge {
+        private final Main plugin;
+        private final String token;
+        private final String channelId;
+        private final OkHttpClient httpClient = new OkHttpClient();
+        
+        public DiscordBridge(Main plugin, String token, String channelId) {
+            this.plugin = plugin;
+            this.token = token;
+            this.channelId = channelId;
+        }
+        
+        public void sendMessage(String message) {
+            try {
+                JSONObject body = new JSONObject().put("content", message);
+                Request request = new Request.Builder()
+                    .url("https://discord.com/api/v9/channels/" + channelId + "/messages")
+                    .post(RequestBody.create(body.toString(), MediaType.get("application/json")))
+                    .header("Authorization", "Bot " + token)
+                    .header("User-Agent", "TeleNukkit")
+                    .build();
+                httpClient.newCall(request).enqueue(new Callback() {
+                    @Override public void onFailure(Call call, IOException e) {
+                        plugin.getLogger().error("Discord message failed: " + e.getMessage());
+                    }
+                    @Override public void onResponse(Call call, Response response) throws IOException {
+                        if (!response.isSuccessful()) plugin.getLogger().error("Discord message error: " + response.body().string());
+                        response.close();
+                    }
+                });
+            } catch (Exception e) {
+                plugin.getLogger().error("Discord send error", e);
+            }
         }
     }
 
@@ -148,12 +190,13 @@ public class Main extends PluginBase implements Listener {
         reloadConfig();
         initLanguages();
         language = getConfig().getString("language", "en");
-        if (getConfig().getBoolean("first-run", true)) {
+        if (getConfig().getBoolean("settings.first-run-setup", true)) {
             getLogger().info(" ");
             getLogger().info("§e=== TeleNukkit First-Time Setup ===");
             getLogger().info("§aPlease run these commands in console:");
             getLogger().info("§b/telesetup telegram <botToken>");
             getLogger().info("§b/telesetup matrix <homeserver> <accessToken> <roomId>");
+            getLogger().info("§b/telesetup discord <token> <channelId>");
             getLogger().info(" ");
             return;
         }
@@ -198,7 +241,7 @@ public class Main extends PluginBase implements Listener {
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (cmd.getName().equalsIgnoreCase("telesetup")) {
             if (args.length < 2) {
-                sender.sendMessage("§cUsage: /telesetup <telegram|matrix> [settings]");
+                sender.sendMessage("§cUsage: /telesetup <telegram|matrix|discord> [settings]");
                 return true;
             }
             String bridgeType = args[0].toLowerCase();
@@ -207,6 +250,7 @@ public class Main extends PluginBase implements Listener {
                     sender.sendMessage("§cUsage: /telesetup telegram <botToken>");
                     return true;
                 }
+                getConfig().set("telegram.enabled", true);
                 getConfig().set("telegram.botToken", args[1]);
                 sender.sendMessage("§aTelegram token set successfully!");
             } else if (bridgeType.equals("matrix")) {
@@ -214,15 +258,25 @@ public class Main extends PluginBase implements Listener {
                     sender.sendMessage("§cUsage: /telesetup matrix <homeserver> <accessToken> <roomId>");
                     return true;
                 }
+                getConfig().set("matrix.enabled", true);
                 getConfig().set("matrix.homeserver", args[1]);
                 getConfig().set("matrix.accessToken", args[2]);
                 getConfig().set("matrix.roomId", args[3]);
                 sender.sendMessage("§aMatrix settings configured!");
+            } else if (bridgeType.equals("discord")) {
+                if (args.length != 3) {
+                    sender.sendMessage("§cUsage: /telesetup discord <token> <channelId>");
+                    return true;
+                }
+                getConfig().set("discord.enabled", true);
+                getConfig().set("discord.token", args[1]);
+                getConfig().set("discord.channel_id", args[2]);
+                sender.sendMessage("§aDiscord settings configured!");
             } else {
-                sender.sendMessage("§cUnknown bridge type. Use 'telegram' or 'matrix'");
+                sender.sendMessage("§cUnknown bridge type. Use 'telegram', 'matrix' or 'discord'");
                 return true;
             }
-            getConfig().set("first-run", false);
+            getConfig().set("settings.first-run-setup", false);
             saveConfig();
             sender.sendMessage("§aRestart server to apply changes!");
             return true;
