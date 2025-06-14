@@ -237,50 +237,84 @@ public class Main extends PluginBase implements Listener {
         bridgeManager.sendToBridges("minecraft", event.getPlayer().getName(), languages.get(language).quit);
     }
 
-    @Override
-    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        if (cmd.getName().equalsIgnoreCase("telesetup")) {
-            if (args.length < 2) {
-                sender.sendMessage("§cUsage: /telesetup <telegram|matrix|discord> [settings]");
-                return true;
-            }
-            String bridgeType = args[0].toLowerCase();
-            if (bridgeType.equals("telegram")) {
-                if (args.length != 2) {
-                    sender.sendMessage("§cUsage: /telesetup telegram <botToken>");
-                    return true;
-                }
-                getConfig().set("telegram.enabled", true);
-                getConfig().set("telegram.botToken", args[1]);
-                sender.sendMessage("§aTelegram token set successfully!");
-            } else if (bridgeType.equals("matrix")) {
-                if (args.length != 4) {
-                    sender.sendMessage("§cUsage: /telesetup matrix <homeserver> <accessToken> <roomId>");
-                    return true;
-                }
-                getConfig().set("matrix.enabled", true);
-                getConfig().set("matrix.homeserver", args[1]);
-                getConfig().set("matrix.accessToken", args[2]);
-                getConfig().set("matrix.roomId", args[3]);
-                sender.sendMessage("§aMatrix settings configured!");
-            } else if (bridgeType.equals("discord")) {
-                if (args.length != 3) {
-                    sender.sendMessage("§cUsage: /telesetup discord <token> <channelId>");
-                    return true;
-                }
-                getConfig().set("discord.enabled", true);
-                getConfig().set("discord.token", args[1]);
-                getConfig().set("discord.channel_id", args[2]);
-                sender.sendMessage("§aDiscord settings configured!");
-            } else {
-                sender.sendMessage("§cUnknown bridge type. Use 'telegram', 'matrix' or 'discord'");
-                return true;
-            }
-            getConfig().set("settings.first-run-setup", false);
-            saveConfig();
-            sender.sendMessage("§aRestart server to apply changes!");
+@Override
+public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+    if (cmd.getName().equalsIgnoreCase("telesetup")) {
+        if (!sender.hasPermission("op")) {
+            sender.sendMessage("§cYou don't have permission to use this command!");
             return true;
         }
+        
+        if (args.length < 1) {
+            sender.sendMessage("§eUsage: /telesetup <telegram|matrix|discord> [settings]");
+            sender.sendMessage("§eExample for Telegram: /telesetup telegram YOUR_BOT_TOKEN");
+            sender.sendMessage("§eExample for Matrix: /telesetup matrix HOMESERVER ACCESS_TOKEN ROOM_ID");
+            sender.sendMessage("§eExample for Discord: /telesetup discord BOT_TOKEN CHANNEL_ID");
+            return true;
+        }
+
+        String bridgeType = args[0].toLowerCase();
+        switch (bridgeType) {
+            case "telegram":
+                return setupTelegram(sender, args);
+            case "matrix":
+                return setupMatrix(sender, args);
+            case "discord":
+                return setupDiscord(sender, args);
+            default:
+                sender.sendMessage("§cUnknown bridge type. Available: telegram, matrix, discord");
+                return true;
+        }
+    }
+    return false;
+}
+
+private boolean setupTelegram(CommandSender sender, String[] args) {
+    if (args.length != 2) {
+        sender.sendMessage("§cUsage: /telesetup telegram <botToken>");
+        return true;
+    }
+    
+    getConfig().set("telegram.enabled", true);
+    getConfig().set("telegram.botToken", args[1]);
+    saveConfig();
+    
+    sender.sendMessage("§aTelegram token set successfully! Restart server to apply changes.");
+    return true;
+}
+
+private boolean setupMatrix(CommandSender sender, String[] args) {
+    if (args.length != 4) {
+        sender.sendMessage("§cUsage: /telesetup matrix <homeserver> <accessToken> <roomId>");
+        sender.sendMessage("§eExample: /telesetup matrix https://matrix.org MYSECRETTOKEN !roomid:matrix.org");
+        return true;
+    }
+    
+    getConfig().set("matrix.enabled", true);
+    getConfig().set("matrix.homeserver", args[1]);
+    getConfig().set("matrix.accessToken", args[2]);
+    getConfig().set("matrix.roomId", args[3]);
+    saveConfig();
+    
+    sender.sendMessage("§aMatrix settings configured! Restart server to apply changes.");
+    return true;
+}
+
+private boolean setupDiscord(CommandSender sender, String[] args) {
+    if (args.length != 3) {
+        sender.sendMessage("§cUsage: /telesetup discord <botToken> <channelId>");
+        sender.sendMessage("§eExample: /telesetup discord 1234567890abcdef 987654321098765432");
+        return true;
+    }
+    
+    getConfig().set("discord.enabled", true);
+    getConfig().set("discord.token", args[1]);
+    getConfig().set("discord.channel_id", args[2]);
+    saveConfig();
+    
+    sender.sendMessage("§aDiscord settings configured! Restart server to apply changes.");
+    return true;
+}
         return false;
     }
 
