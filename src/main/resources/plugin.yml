@@ -3,33 +3,41 @@ version: 1.0.1.2b2
 main: com.debianrose.TeleNukkit.Main
 api: ["1.0.0"]
 author: debianrose
-description: Bridge Between Telegram/Matrix/Discord And Nukkit with account linking
+description: |
+  Advanced bridge between Minecraft and messaging platforms
+  (Telegram/Matrix/Discord) with account linking
 
 commands:
   telesetup:
-    description: Configure bridge settings
+    description: Configure bridge connections
     usage: |
       /telesetup telegram <botToken>
       /telesetup matrix <homeserver> <accessToken> <roomId>
       /telesetup discord <token> <channelId>
     permission: telenukkit.admin
-  linkaccount:
-    description: Link your account
-    usage: /linkaccount <code>
+  getlinkcode:
+    description: Get your account linking code
+    usage: /getlinkcode
+    aliases: [linkcode, codelink]
     permission: telenukkit.user
   unlinkaccount:
-    description: Unlink your account
+    description: Unlink your external account
     usage: /unlinkaccount
+    aliases: [unlink]
     permission: telenukkit.user
   togglelinking:
-    description: Toggle account linking feature
-    usage: /togglelinking <on/off>
+    description: Toggle account linking system
+    usage: /togglelinking <on|off>
     permission: telenukkit.admin
+  checkupdate:
+    description: Check for plugin updates
+    usage: /checkupdate
+    permission: telenukkit.user
 
 permissions:
   telenukkit.user:
-    description: Allows using account linking features
+    description: Allows using basic bridge features
     default: true
   telenukkit.admin:
-    description: Allows configuring bridges and features
+    description: Allows configuring bridges and system settings
     default: op

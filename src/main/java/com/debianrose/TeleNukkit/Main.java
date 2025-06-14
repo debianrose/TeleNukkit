@@ -98,6 +98,13 @@ public class Main extends PluginBase implements Listener {
             plugin.handleLinkCode(messenger, externalId, code);
         }
     }
+    public BridgeManager getBridgeManager() {
+    return this.bridgeManager;
+}
+
+public LanguagePack getLanguagePack() {
+    return languages.get(language);
+}
 
     public class TelegramBridge extends TelegramLongPollingBot {
         private final Main plugin;
@@ -136,7 +143,7 @@ public class Main extends PluginBase implements Listener {
             
             if (text.startsWith("/link ")) {
                 String code = text.substring(6).trim();
-                plugin.getBridgeManager().processLinkCommand("telegram", sender, code);
+                Main.this.getBridgeManager().processLinkCommand("telegram", sender, code);
                 return;
             }
             
@@ -148,11 +155,11 @@ public class Main extends PluginBase implements Listener {
                 }
                 
                 if (text.equalsIgnoreCase("/online")) {
-                    sendToChat(activeGroupChatId, plugin.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
+                    sendToChat(activeGroupChatId, Main.this.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
                 } else if (!text.startsWith("/")) {
                     String minecraftName = plugin.reverseLinks.get(sender);
                     String displayName = minecraftName != null ? minecraftName : sender;
-                    plugin.getBridgeManager().sendToGame(displayName, text);
+                    Main.this.getBridgeManager().sendToGame(displayName, text);
                 }
             }
         }
