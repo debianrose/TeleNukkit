@@ -315,8 +315,6 @@ private boolean setupDiscord(CommandSender sender, String[] args) {
     sender.sendMessage("§aDiscord settings configured! Restart server to apply changes.");
     return true;
 }
-        return false;
-    }
 
     static class LanguagePack {
         public final String online;
