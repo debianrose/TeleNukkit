@@ -67,5 +67,5 @@ jobs:
       with:
         upload_url: ${{ steps.create-draft-release.outputs.upload_url }}
         asset_path: build/libs/tn-1.0.1.2.jar
-        asset_name: tn-manual-${{ github.run_id }}.jar
+        asset_name: tn-1.0.1.2b.jar
         asset_content_type: application/java-archive
