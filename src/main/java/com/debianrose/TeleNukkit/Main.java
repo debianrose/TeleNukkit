@@ -72,10 +72,9 @@ public class Main extends PluginBase implements Listener {
         }
         
         public void sendToBridges(String source, String sender, String message) {
-            String format = plugin.getConfig().getString("formats.system-message", "[System] {message}");
-            if (!source.equals("system")) {
-                format = plugin.getConfig().getString("formats." + source + "-to-bridge", "[{sender}] {message}");
-            }
+            String format = source.equals("system") 
+                ? plugin.getConfig().getString("formats.system-message", "[System] {message}")
+                : plugin.getConfig().getString("formats." + source + "-to-bridge", "[{sender}] {message}");
             
             String formatted = format.replace("{sender}", sender).replace("{message}", message);
             
@@ -91,21 +90,13 @@ public class Main extends PluginBase implements Listener {
         }
         
         public void processLinkCommand(String messenger, String externalId, String code) {
-            if (!plugin.getConfig().getBoolean("features.account-linking", true) || 
-                !plugin.getConfig().getBoolean(messenger.toLowerCase() + ".account-linking", true)) {
+            if (!plugin.getConfig().getBoolean("features.account-linking", true)) {
                 sendToBridges(messenger, "System", "Account linking is currently disabled");
                 return;
             }
             plugin.handleLinkCode(messenger, externalId, code);
         }
     }
-    public BridgeManager getBridgeManager() {
-    return this.bridgeManager;
-}
-
-public LanguagePack getLanguagePack() {
-    return languages.get(language);
-}
 
     public class TelegramBridge extends TelegramLongPollingBot {
         private final Main plugin;
@@ -130,40 +121,40 @@ public LanguagePack getLanguagePack() {
             }
         }
         
-@Override 
-public void onUpdateReceived(Update update) {
-    if (!update.hasMessage() || !update.getMessage().hasText()) return;
-    
-    Message message = update.getMessage();
-    String messageId = message.getMessageId().toString();
-    if (processedMessages.contains(messageId)) return;
-    processedMessages.add(messageId);
-    
-    Chat chat = message.getChat();
-    String text = message.getText();
-    User user = message.getFrom(); // Получаем объект пользователя
-    String sender = user.getUserName();
-    
-    // Проверяем, что сообщение из группового чата
-    if (chat.isGroupChat() || chat.isSuperGroupChat()) {
-        if (activeGroupChatId == null) {
-            activeGroupChatId = chat.getId().toString();
-            sendToChat(activeGroupChatId, "Бот активирован в этой группе!");
-            return;
+        @Override public void onUpdateReceived(Update update) {
+            if (!update.hasMessage() || !update.getMessage().hasText()) return;
+            
+            Message message = update.getMessage();
+            String messageId = message.getMessageId().toString();
+            if (processedMessages.contains(messageId)) return;
+            processedMessages.add(messageId);
+            
+            Chat chat = message.getChat();
+            String text = message.getText();
+            String sender = message.getFrom().getUserName();
+            
+            if (text.startsWith("/link ")) {
+                String code = text.substring(6).trim();
+                Main.this.getBridgeManager().processLinkCommand("telegram", sender, code);
+                return;
+            }
+            
+            if (chat.isGroupChat() || chat.isSuperGroupChat()) {
+                if (activeGroupChatId == null) {
+                    activeGroupChatId = chat.getId().toString();
+                    sendToChat(activeGroupChatId, "Bot activated in this group!");
+                    return;
+                }
+                
+                if (text.equalsIgnoreCase("/online")) {
+                    sendToChat(activeGroupChatId, Main.this.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
+                } else if (!text.startsWith("/")) {
+                    String minecraftName = plugin.reverseLinks.get(sender);
+                    String displayName = minecraftName != null ? minecraftName : sender;
+                    Main.this.getBridgeManager().sendToGame(displayName, text);
+                }
+            }
         }
-        
-        // Обработка команд
-        if (text.equalsIgnoreCase("/online")) {
-            sendToChat(activeGroupChatId, plugin.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
-        } 
-        // Обработка обычных сообщений
-        else if (!text.startsWith("/")) {
-            String minecraftName = plugin.reverseLinks.get(sender);
-            String displayName = minecraftName != null ? minecraftName : sender;
-            plugin.getBridgeManager().sendToGame(displayName, text);
-        }
-    }
-}
         
         public void sendMessage(String message) {
             if (activeGroupChatId != null) sendToChat(activeGroupChatId, message);
@@ -615,5 +606,13 @@ public void onUpdateReceived(Update update) {
             return account;
         }
         return null;
+    }
+
+    public BridgeManager getBridgeManager() {
+        return bridgeManager;
+    }
+
+    public LanguagePack getLanguagePack() {
+        return languages.get(language);
     }
 }
