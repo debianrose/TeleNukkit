@@ -14,6 +14,7 @@ import cn.nukkit.scheduler.AsyncTask;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.Chat;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
@@ -129,40 +130,40 @@ public LanguagePack getLanguagePack() {
             }
         }
         
-        @Override public void onUpdateReceived(Update update) {
-            if (!update.hasMessage() || !update.getMessage().hasText()) return;
-            
-            Message message = update.getMessage();
-            String messageId = message.getMessageId().toString();
-            if (processedMessages.contains(messageId)) return;
-            processedMessages.add(messageId);
-            
-            Chat chat = message.getChat();
-            String text = message.getText();
-            String sender = message.getFrom().getUserName();
-            
-            if (text.startsWith("/link ")) {
-                String code = text.substring(6).trim();
-                Main.this.getBridgeManager().processLinkCommand("telegram", sender, code);
-                return;
-            }
-            
-            if (chat.isGroupChat() || chat.isSuperGroupChat()) {
-                if (activeGroupChatId == null) {
-                    activeGroupChatId = chat.getId().toString();
-                    sendToChat(activeGroupChatId, "Bot activated in this group!");
-                    return;
-                }
-                
-                if (text.equalsIgnoreCase("/online")) {
-                    sendToChat(activeGroupChatId, Main.this.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
-                } else if (!text.startsWith("/")) {
-                    String minecraftName = plugin.reverseLinks.get(sender);
-                    String displayName = minecraftName != null ? minecraftName : sender;
-                    Main.this.getBridgeManager().sendToGame(displayName, text);
-                }
-            }
+@Override 
+public void onUpdateReceived(Update update) {
+    if (!update.hasMessage() || !update.getMessage().hasText()) return;
+    
+    Message message = update.getMessage();
+    String messageId = message.getMessageId().toString();
+    if (processedMessages.contains(messageId)) return;
+    processedMessages.add(messageId);
+    
+    Chat chat = message.getChat();
+    String text = message.getText();
+    User user = message.getFrom(); // Получаем объект пользователя
+    String sender = user.getUserName();
+    
+    // Проверяем, что сообщение из группового чата
+    if (chat.isGroupChat() || chat.isSuperGroupChat()) {
+        if (activeGroupChatId == null) {
+            activeGroupChatId = chat.getId().toString();
+            sendToChat(activeGroupChatId, "Бот активирован в этой группе!");
+            return;
         }
+        
+        // Обработка команд
+        if (text.equalsIgnoreCase("/online")) {
+            sendToChat(activeGroupChatId, plugin.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
+        } 
+        // Обработка обычных сообщений
+        else if (!text.startsWith("/")) {
+            String minecraftName = plugin.reverseLinks.get(sender);
+            String displayName = minecraftName != null ? minecraftName : sender;
+            plugin.getBridgeManager().sendToGame(displayName, text);
+        }
+    }
+}
         
         public void sendMessage(String message) {
             if (activeGroupChatId != null) sendToChat(activeGroupChatId, message);
