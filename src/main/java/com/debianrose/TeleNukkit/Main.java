@@ -14,6 +14,7 @@ import cn.nukkit.scheduler.AsyncTask;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.Chat;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
@@ -71,10 +72,9 @@ public class Main extends PluginBase implements Listener {
         }
         
         public void sendToBridges(String source, String sender, String message) {
-            String format = plugin.getConfig().getString("formats.system-message", "[System] {message}");
-            if (!source.equals("system")) {
-                format = plugin.getConfig().getString("formats." + source + "-to-bridge", "[{sender}] {message}");
-            }
+            String format = source.equals("system") 
+                ? plugin.getConfig().getString("formats.system-message", "[System] {message}")
+                : plugin.getConfig().getString("formats." + source + "-to-bridge", "[{sender}] {message}");
             
             String formatted = format.replace("{sender}", sender).replace("{message}", message);
             
@@ -90,21 +90,13 @@ public class Main extends PluginBase implements Listener {
         }
         
         public void processLinkCommand(String messenger, String externalId, String code) {
-            if (!plugin.getConfig().getBoolean("features.account-linking", true) || 
-                !plugin.getConfig().getBoolean(messenger.toLowerCase() + ".account-linking", true)) {
+            if (!plugin.getConfig().getBoolean("features.account-linking", true)) {
                 sendToBridges(messenger, "System", "Account linking is currently disabled");
                 return;
             }
             plugin.handleLinkCode(messenger, externalId, code);
         }
     }
-    public BridgeManager getBridgeManager() {
-    return this.bridgeManager;
-}
-
-public LanguagePack getLanguagePack() {
-    return languages.get(language);
-}
 
     public class TelegramBridge extends TelegramLongPollingBot {
         private final Main plugin;
@@ -139,11 +131,12 @@ public LanguagePack getLanguagePack() {
             
             Chat chat = message.getChat();
             String text = message.getText();
-            String sender = message.getFrom().getUserName();
+            User user = message.getFrom();
+            String sender = user.getUserName() != null ? user.getUserName() : user.getFirstName();
             
             if (text.startsWith("/link ")) {
                 String code = text.substring(6).trim();
-                Main.this.getBridgeManager().processLinkCommand("telegram", sender, code);
+                plugin.getBridgeManager().processLinkCommand("telegram", sender, code);
                 return;
             }
             
@@ -155,11 +148,11 @@ public LanguagePack getLanguagePack() {
                 }
                 
                 if (text.equalsIgnoreCase("/online")) {
-                    sendToChat(activeGroupChatId, Main.this.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
+                    sendToChat(activeGroupChatId, plugin.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
                 } else if (!text.startsWith("/")) {
                     String minecraftName = plugin.reverseLinks.get(sender);
                     String displayName = minecraftName != null ? minecraftName : sender;
-                    Main.this.getBridgeManager().sendToGame(displayName, text);
+                    plugin.getBridgeManager().sendToGame(displayName, text);
                 }
             }
         }
@@ -614,5 +607,13 @@ public LanguagePack getLanguagePack() {
             return account;
         }
         return null;
+    }
+
+    public BridgeManager getBridgeManager() {
+        return bridgeManager;
+    }
+
+    public LanguagePack getLanguagePack() {
+        return languages.get(language);
     }
 }
