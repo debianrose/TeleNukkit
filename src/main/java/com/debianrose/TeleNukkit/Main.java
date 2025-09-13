@@ -14,7 +14,6 @@ import cn.nukkit.scheduler.AsyncTask;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.Chat;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
@@ -26,6 +25,9 @@ import java.util.*;
 import java.io.IOException;
 import java.io.File;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.ConcurrentHashMap;
+import java.net.Proxy;
+import java.net.InetSocketAddress;
 
 public class Main extends PluginBase implements Listener {
     private BridgeManager bridgeManager;
@@ -35,214 +37,10 @@ public class Main extends PluginBase implements Listener {
     private Config accountLinks;
     private final HashMap<String, String> prefixCache = new HashMap<>();
     private final HashMap<String, String> accountLinkCache = new HashMap<>();
-    private final Map<String, String> linkCodes = new HashMap<>();
+    private final Map<String, String> linkCodes = new ConcurrentHashMap<>(); // thread-safe for async ops
     private final Map<String, String> reverseLinks = new HashMap<>();
     private boolean updateAvailable = false;
     private String latestVersion = "";
-
-    public class BridgeManager {
-        private final Main plugin;
-        private TelegramBridge telegramBridge;
-        private MatrixBridge matrixBridge;
-        private DiscordBridge discordBridge;
-        
-        public BridgeManager(Main plugin) throws Exception {
-            this.plugin = plugin;
-            if (plugin.getConfig().getBoolean("telegram.enabled") && !plugin.getConfig().getString("telegram.botToken").isEmpty())
-                telegramBridge = new TelegramBridge(plugin, plugin.getConfig().getString("telegram.botToken"));
-            if (plugin.getConfig().getBoolean("matrix.enabled") && !plugin.getConfig().getString("matrix.accessToken").isEmpty())
-                matrixBridge = new MatrixBridge(plugin,
-                    plugin.getConfig().getString("matrix.homeserver"),
-                    plugin.getConfig().getString("matrix.accessToken"),
-                    plugin.getConfig().getString("matrix.roomId"));
-            if (plugin.getConfig().getBoolean("discord.enabled") && !plugin.getConfig().getString("discord.token").isEmpty())
-                discordBridge = new DiscordBridge(plugin,
-                    plugin.getConfig().getString("discord.token"),
-                    plugin.getConfig().getString("discord.channel_id"));
-        }
-        
-        public void sendToGame(String sender, String message) {
-            if (!plugin.getConfig().getBoolean("features.cross-chat", true)) return;
-            
-            String format = plugin.getConfig().getString("formats.telegram-to-minecraft", "[TG] {sender}: {message}");
-            String formatted = format.replace("{sender}", sender).replace("{message}", message);
-            for (Player player : plugin.getServer().getOnlinePlayers().values()) {
-                player.sendMessage(formatted);
-            }
-        }
-        
-        public void sendToBridges(String source, String sender, String message) {
-            String format = source.equals("system") 
-                ? plugin.getConfig().getString("formats.system-message", "[System] {message}")
-                : plugin.getConfig().getString("formats." + source + "-to-bridge", "[{sender}] {message}");
-            
-            String formatted = format.replace("{sender}", sender).replace("{message}", message);
-            
-            if (!source.equalsIgnoreCase("telegram") && telegramBridge != null) {
-                telegramBridge.sendMessage(formatted);
-            }
-            if (!source.equalsIgnoreCase("matrix") && matrixBridge != null) {
-                matrixBridge.sendMessage(formatted);
-            }
-            if (!source.equalsIgnoreCase("discord") && discordBridge != null) {
-                discordBridge.sendMessage(formatted);
-            }
-        }
-        
-        public void processLinkCommand(String messenger, String externalId, String code) {
-            if (!plugin.getConfig().getBoolean("features.account-linking", true)) {
-                sendToBridges(messenger, "System", "Account linking is currently disabled");
-                return;
-            }
-            plugin.handleLinkCode(messenger, externalId, code);
-        }
-    }
-
-    public class TelegramBridge extends TelegramLongPollingBot {
-        private final Main plugin;
-        private final String token;
-        private String activeGroupChatId;
-        private final Set<String> processedMessages = new HashSet<>();
-        
-        public TelegramBridge(Main plugin, String token) throws Exception {
-            this.plugin = plugin;
-            this.token = token;
-            new TelegramBotsApi(DefaultBotSession.class).registerBot(this);
-        }
-        
-        @Override public String getBotUsername() { return "TeleNukkitBot"; }
-        @Override public String getBotToken() { return token; }
-        
-        private void sendToChat(String chatId, String message) {
-            try {
-                execute(new SendMessage(chatId, message));
-            } catch (TelegramApiException e) {
-                plugin.getLogger().error("Error sending to Telegram", e);
-            }
-        }
-        
-        @Override public void onUpdateReceived(Update update) {
-            if (!update.hasMessage() || !update.getMessage().hasText()) return;
-            
-            Message message = update.getMessage();
-            String messageId = message.getMessageId().toString();
-            if (processedMessages.contains(messageId)) return;
-            processedMessages.add(messageId);
-            
-            Chat chat = message.getChat();
-            String text = message.getText();
-            String sender = message.getFrom().getUserName();
-            
-            if (text.startsWith("/link ")) {
-                String code = text.substring(6).trim();
-                Main.this.getBridgeManager().processLinkCommand("telegram", sender, code);
-                return;
-            }
-            
-            if (chat.isGroupChat() || chat.isSuperGroupChat()) {
-                if (activeGroupChatId == null) {
-                    activeGroupChatId = chat.getId().toString();
-                    sendToChat(activeGroupChatId, "Bot activated in this group!");
-                    return;
-                }
-                
-                if (text.equalsIgnoreCase("/online")) {
-                    sendToChat(activeGroupChatId, Main.this.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
-                } else if (!text.startsWith("/")) {
-                    String minecraftName = plugin.reverseLinks.get(sender);
-                    String displayName = minecraftName != null ? minecraftName : sender;
-                    Main.this.getBridgeManager().sendToGame(displayName, text);
-                }
-            }
-        }
-        
-        public void sendMessage(String message) {
-            if (activeGroupChatId != null) sendToChat(activeGroupChatId, message);
-        }
-    }
-
-    public class MatrixBridge {
-        private final Main plugin;
-        private final String homeserver;
-        private final String accessToken;
-        private final String roomId;
-        private final OkHttpClient httpClient = new OkHttpClient();
-        
-        public MatrixBridge(Main plugin, String homeserver, String accessToken, String roomId) {
-            this.plugin = plugin;
-            this.homeserver = homeserver;
-            this.accessToken = accessToken;
-            this.roomId = roomId;
-        }
-        
-        public void sendMessage(String message) {
-            try {
-                JSONObject body = new JSONObject().put("msgtype", "m.text").put("body", message);
-                Request request = new Request.Builder()
-                    .url(homeserver + "/_matrix/client/r0/rooms/" + roomId + "/send/m.room.message?access_token=" + accessToken)
-                    .post(RequestBody.create(body.toString(), MediaType.get("application/json")))
-                    .build();
-                httpClient.newCall(request).enqueue(new Callback() {
-                    @Override public void onFailure(Call call, IOException e) {
-                        plugin.getLogger().error("Matrix message failed: " + e.getMessage());
-                    }
-                    @Override public void onResponse(Call call, Response response) throws IOException {
-                        if (!response.isSuccessful()) plugin.getLogger().error("Matrix message error: " + response.body().string());
-                        response.close();
-                    }
-                });
-            } catch (Exception e) {
-                plugin.getLogger().error("Matrix send error", e);
-            }
-        }
-    }
-
-    public class DiscordBridge {
-        private final Main plugin;
-        private final String token;
-        private final String channelId;
-        private final OkHttpClient httpClient = new OkHttpClient();
-        
-        public DiscordBridge(Main plugin, String token, String channelId) {
-            this.plugin = plugin;
-            this.token = token;
-            this.channelId = channelId;
-        }
-        
-        public void sendMessage(String message) {
-            try {
-                JSONObject body = new JSONObject().put("content", message);
-                Request request = new Request.Builder()
-                    .url("https://discord.com/api/v9/channels/" + channelId + "/messages")
-                    .post(RequestBody.create(body.toString(), MediaType.get("application/json")))
-                    .header("Authorization", "Bot " + token)
-                    .header("User-Agent", "TeleNukkit")
-                    .build();
-                httpClient.newCall(request).enqueue(new Callback() {
-                    @Override public void onFailure(Call call, IOException e) {
-                        plugin.getLogger().error("Discord message failed: " + e.getMessage());
-                    }
-                    @Override public void onResponse(Call call, Response response) throws IOException {
-                        if (!response.isSuccessful()) plugin.getLogger().error("Discord message error: " + response.body().string());
-                        response.close();
-                    }
-                });
-            } catch (Exception e) {
-                plugin.getLogger().error("Discord send error", e);
-            }
-        }
-    }
-
-    static class LanguagePack {
-        public final String online;
-        public final String join;
-        public final String quit;
-        public LanguagePack(Map<String, String> messages) {
-            this.online = messages.get("online");
-            this.join = messages.get("join");
-            this.quit = messages.get("quit");
-        }
-    }
 
     @Override
     public void onEnable() {
@@ -253,64 +51,59 @@ public class Main extends PluginBase implements Listener {
         language = getConfig().getString("language", "en");
 
         if (getConfig().getBoolean("settings.check-for-updates", true)) {
-            checkForUpdates();
+            checkForUpdatesAsync();
         }
 
         try {
             bridgeManager = new BridgeManager(this);
             getServer().getPluginManager().registerEvents(this, this);
             getLogger().info("TeleNukkit successfully enabled!");
-            if (updateAvailable) {
-                getLogger().info("§eUpdate available! Version " + latestVersion);
-                bridgeManager.sendToBridges("system", "Update Checker", 
-                    "New plugin update available: " + latestVersion);
-            }
+            notifyUpdateIfAvailable();
         } catch (Exception e) {
             getLogger().error("Error while starting plugin", e);
         }
     }
 
+    private void notifyUpdateIfAvailable() {
+        if (updateAvailable) {
+            getLogger().info("§eUpdate available! Version " + latestVersion);
+            bridgeManager.sendToBridges("system", "Update Checker", 
+                "New plugin update available: " + latestVersion);
+        }
+    }
+
     private void initLanguages() {
-        Map<String, String> en = Map.of("online", "Players online: ", "join", " joined the game!", "quit", " left the game!");
-        languages.put("en", new LanguagePack(en));
-        Map<String, String> ru = Map.of("online", "Игроков онлайн: ", "join", " зашел на сервер!", "quit", " вышел с сервера!");
-        languages.put("ru", new LanguagePack(ru));
-        Map<String, String> es = Map.of("online", "Jugadores en línea: ", "join", " se unió al juego!", "quit", " dejó el juego!");
-        languages.put("es", new LanguagePack(es));
-        Map<String, String> fr = Map.of("online", "Joueurs en ligne: ", "join", " a rejoint le jeu!", "quit", " a quitté le jeu!");
-        languages.put("fr", new LanguagePack(fr));
-        Map<String, String> zh = Map.of("online", "在线玩家: ", "join", " 加入了游戏!", "quit", " 离开了游戏!");
-        languages.put("zh", new LanguagePack(zh));
+        languages.put("en", new LanguagePack(Map.of("online", "Players online: ", "join", " joined the game!", "quit", " left the game!")));
+        languages.put("ru", new LanguagePack(Map.of("online", "Игроков онлайн: ", "join", " зашел на сервер!", "quit", " вышел с сервера!")));
+        languages.put("es", new LanguagePack(Map.of("online", "Jugadores en línea: ", "join", " se unió al juego!", "quit", " dejó el juego!")));
+        languages.put("fr", new LanguagePack(Map.of("online", "Joueurs en ligne: ", "join", " a rejoint le jeu!", "quit", " a quitté le jeu!")));
+        languages.put("zh", new LanguagePack(Map.of("online", "在线玩家: ", "join", " 加入了游戏!", "quit", " 离开了游戏!")));
     }
 
     private void loadDataFiles() {
         this.getDataFolder().mkdirs();
         this.prefixes = new Config(new File(this.getDataFolder(), "prefixes.yml"), Config.YAML);
         this.accountLinks = new Config(new File(this.getDataFolder(), "account_links.yml"), Config.YAML);
-        
+
         for (String key : accountLinks.getKeys()) {
             String externalId = accountLinks.getString(key);
             reverseLinks.put(externalId, key);
         }
     }
 
-    private void checkForUpdates() {
+    private void checkForUpdatesAsync() {
         getServer().getScheduler().scheduleAsyncTask(this, new AsyncTask() {
             @Override
             public void onRun() {
-                OkHttpClient client = new OkHttpClient();
+                OkHttpClient client = createHttpClientWithProxy();
                 Request request = new Request.Builder()
                     .url("https://api.github.com/repos/debianrose/TeleNukkit/releases/latest")
                     .build();
-
                 try (Response response = client.newCall(request).execute()) {
                     if (response.isSuccessful()) {
                         JSONObject json = new JSONObject(response.body().string());
-                        latestVersion = json.getString("tag_name").replace("v", "");
-                        
-                        if (!getDescription().getVersion().equals(latestVersion)) {
-                            updateAvailable = true;
-                        }
+                        latestVersion = json.optString("tag_name", "").replace("v", "");
+                        updateAvailable = !getDescription().getVersion().equals(latestVersion);
                     }
                 } catch (Exception e) {
                     getLogger().error("Failed to check for updates: " + e.getMessage());
@@ -319,20 +112,42 @@ public class Main extends PluginBase implements Listener {
         });
     }
 
+    private Proxy getProxyFromConfig() {
+        String proxyType = getConfig().getString("proxy.type", "");
+        String proxyHost = getConfig().getString("proxy.host", "");
+        int proxyPort = getConfig().getInt("proxy.port", 0);
+        if (proxyType.isEmpty() || proxyHost.isEmpty() || proxyPort == 0) return Proxy.NO_PROXY;
+
+        Proxy.Type type;
+        switch (proxyType.toLowerCase()) {
+            case "socks":
+            case "socks5":
+                type = Proxy.Type.SOCKS;
+                break;
+            case "http":
+                type = Proxy.Type.HTTP;
+                break;
+            default:
+                type = Proxy.Type.DIRECT;
+        }
+        return new Proxy(type, new InetSocketAddress(proxyHost, proxyPort));
+    }
+
+    private OkHttpClient createHttpClientWithProxy() {
+        Proxy proxy = getProxyFromConfig();
+        return new OkHttpClient.Builder().proxy(proxy).build();
+    }
+
     @EventHandler
     public void onPlayerChat(PlayerChatEvent event) {
         Player player = event.getPlayer();
         String prefix = getPrefix(player);
         String linkedAccount = getLinkedAccount(player);
-        
+
         String senderName = player.getName();
-        if (linkedAccount != null) {
-            senderName = "[MC] " + senderName;
-        }
-        if (!prefix.isEmpty()) {
-            senderName = prefix + " " + senderName;
-        }
-        
+        if (linkedAccount != null) senderName = "[MC] " + senderName;
+        if (!prefix.isEmpty()) senderName = prefix + " " + senderName;
+
         bridgeManager.sendToBridges("minecraft", senderName, event.getMessage());
     }
 
@@ -356,16 +171,16 @@ public class Main extends PluginBase implements Listener {
             bridgeManager.sendToBridges(messenger, "System", "Invalid link code!");
             return;
         }
-        
+
         accountLinks.set(playerName.toLowerCase(), externalId);
         accountLinks.save();
         accountLinkCache.put(playerName.toLowerCase(), externalId);
         reverseLinks.put(externalId, playerName.toLowerCase());
-        
+
         prefixes.set(playerName.toLowerCase(), "[" + messenger.toUpperCase() + "]");
         prefixes.save();
         prefixCache.put(playerName.toLowerCase(), "[" + messenger.toUpperCase() + "]");
-        
+
         bridgeManager.sendToBridges("system", "System", playerName + " linked their account to " + messenger);
         Player player = getServer().getPlayerExact(playerName);
         if (player != null) {
@@ -375,21 +190,16 @@ public class Main extends PluginBase implements Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        switch (cmd.getName().toLowerCase()) {
-            case "telesetup":
-                return handleTeleSetup(sender, args);
+        String command = cmd.getName().toLowerCase();
+        switch (command) {
+            case "telesetup": return handleTeleSetup(sender, args);
             case "getlinkcode":
             case "linkcode":
-            case "getcodelink":
-                return handleGetLinkCode(sender);
-            case "unlinkaccount":
-                return handleUnlinkAccount(sender);
-            case "togglelinking":
-                return handleToggleLinking(sender, args);
-            case "checkupdate":
-                return handleCheckUpdate(sender);
-            default:
-                return handleUnknownCommand(sender);
+            case "getcodelink": return handleGetLinkCode(sender);
+            case "unlinkaccount": return handleUnlinkAccount(sender);
+            case "togglelinking": return handleToggleLinking(sender, args);
+            case "checkupdate": return handleCheckUpdate(sender);
+            default: return handleUnknownCommand(sender);
         }
     }
 
@@ -398,7 +208,7 @@ public class Main extends PluginBase implements Listener {
             sender.sendMessage("§cYou don't have permission to use this command!");
             return true;
         }
-        
+
         if (args.length < 1) {
             sender.sendMessage("§eUsage:");
             sender.sendMessage("§b/telesetup telegram <botToken>");
@@ -409,12 +219,9 @@ public class Main extends PluginBase implements Listener {
 
         String bridgeType = args[0].toLowerCase();
         switch (bridgeType) {
-            case "telegram":
-                return setupTelegram(sender, args);
-            case "matrix":
-                return setupMatrix(sender, args);
-            case "discord":
-                return setupDiscord(sender, args);
+            case "telegram": return setupTelegram(sender, args);
+            case "matrix": return setupMatrix(sender, args);
+            case "discord": return setupDiscord(sender, args);
             default:
                 sender.sendMessage("§cUnknown bridge type. Available: telegram, matrix, discord");
                 return true;
@@ -426,11 +233,11 @@ public class Main extends PluginBase implements Listener {
             sender.sendMessage("§cUsage: /telesetup telegram <botToken>");
             return true;
         }
-        
+
         getConfig().set("telegram.enabled", true);
         getConfig().set("telegram.botToken", args[1]);
         saveConfig();
-        
+
         try {
             bridgeManager = new BridgeManager(this);
             sender.sendMessage("§aTelegram configured! Restart server to apply changes.");
@@ -446,13 +253,13 @@ public class Main extends PluginBase implements Listener {
             sender.sendMessage("§cUsage: /telesetup matrix <homeserver> <accessToken> <roomId>");
             return true;
         }
-        
+
         getConfig().set("matrix.enabled", true);
         getConfig().set("matrix.homeserver", args[1]);
         getConfig().set("matrix.accessToken", args[2]);
         getConfig().set("matrix.roomId", args[3]);
         saveConfig();
-        
+
         try {
             bridgeManager = new BridgeManager(this);
             sender.sendMessage("§aMatrix configured! Restart server to apply changes.");
@@ -468,12 +275,12 @@ public class Main extends PluginBase implements Listener {
             sender.sendMessage("§cUsage: /telesetup discord <token> <channelId>");
             return true;
         }
-        
+
         getConfig().set("discord.enabled", true);
         getConfig().set("discord.token", args[1]);
         getConfig().set("discord.channel_id", args[2]);
         saveConfig();
-        
+
         try {
             bridgeManager = new BridgeManager(this);
             sender.sendMessage("§aDiscord configured! Restart server to apply changes.");
@@ -489,20 +296,20 @@ public class Main extends PluginBase implements Listener {
             sender.sendMessage("§cThis command is for players only!");
             return true;
         }
-        
+
         if (!getConfig().getBoolean("features.account-linking", true)) {
             sender.sendMessage("§cAccount linking is currently disabled!");
             return true;
         }
-        
+
         Player player = (Player) sender;
         String code = generateLinkCode();
         linkCodes.put(code, player.getName());
-        
+
         getServer().getScheduler().scheduleDelayedTask(this, () -> {
             linkCodes.remove(code);
         }, 20 * 60 * 5);
-        
+
         player.sendMessage("§aYour link code: §e" + code);
         player.sendMessage("§aUse this code in your messaging app with /link command");
         return true;
@@ -513,15 +320,15 @@ public class Main extends PluginBase implements Listener {
             sender.sendMessage("§cThis command is for players only!");
             return true;
         }
-        
+
         Player player = (Player) sender;
         String playerName = player.getName().toLowerCase();
-        
+
         if (!accountLinks.exists(playerName)) {
             sender.sendMessage("§cYour account is not linked!");
             return true;
         }
-        
+
         String externalId = accountLinks.getString(playerName);
         accountLinks.remove(playerName);
         accountLinks.save();
@@ -530,7 +337,7 @@ public class Main extends PluginBase implements Listener {
         prefixes.remove(playerName);
         prefixes.save();
         prefixCache.remove(playerName);
-        
+
         sender.sendMessage("§aYour account has been unlinked!");
         bridgeManager.sendToBridges("system", "System", player.getName() + " unlinked their account");
         return true;
@@ -541,19 +348,19 @@ public class Main extends PluginBase implements Listener {
             sender.sendMessage("§cYou don't have permission to use this command!");
             return true;
         }
-        
+
         if (args.length != 1) {
             sender.sendMessage("§cUsage: /togglelinking <on|off>");
             return true;
         }
-        
+
         boolean enable = args[0].equalsIgnoreCase("on");
         getConfig().set("features.account-linking", enable);
         saveConfig();
-        
+
         String status = enable ? "§aenabled" : "§cdisabled";
         sender.sendMessage("§7Account linking has been " + status);
-        bridgeManager.sendToBridges("system", "System", 
+        bridgeManager.sendToBridges("system", "System",
             "Account linking has been " + (enable ? "enabled" : "disabled"));
         return true;
     }
@@ -614,5 +421,222 @@ public class Main extends PluginBase implements Listener {
 
     public LanguagePack getLanguagePack() {
         return languages.get(language);
+    }
+
+    public class BridgeManager {
+        private final Main plugin;
+        private TelegramBridge telegramBridge;
+        private MatrixBridge matrixBridge;
+        private DiscordBridge discordBridge;
+
+        public BridgeManager(Main plugin) throws Exception {
+            this.plugin = plugin;
+            if (plugin.getConfig().getBoolean("telegram.enabled") && !plugin.getConfig().getString("telegram.botToken").isEmpty())
+                telegramBridge = new TelegramBridge(plugin, plugin.getConfig().getString("telegram.botToken"));
+            if (plugin.getConfig().getBoolean("matrix.enabled") && !plugin.getConfig().getString("matrix.accessToken").isEmpty())
+                matrixBridge = new MatrixBridge(plugin,
+                    plugin.getConfig().getString("matrix.homeserver"),
+                    plugin.getConfig().getString("matrix.accessToken"),
+                    plugin.getConfig().getString("matrix.roomId"));
+            if (plugin.getConfig().getBoolean("discord.enabled") && !plugin.getConfig().getString("discord.token").isEmpty())
+                discordBridge = new DiscordBridge(plugin,
+                    plugin.getConfig().getString("discord.token"),
+                    plugin.getConfig().getString("discord.channel_id"));
+        }
+
+        public void sendToGame(String sender, String message) {
+            if (!plugin.getConfig().getBoolean("features.cross-chat", true)) return;
+            String format = plugin.getConfig().getString("formats.telegram-to-minecraft", "[TG] {sender}: {message}");
+            String formatted = format.replace("{sender}", sender).replace("{message}", message);
+            for (Player player : plugin.getServer().getOnlinePlayers().values()) {
+                player.sendMessage(formatted);
+            }
+        }
+
+        public void sendToBridges(String source, String sender, String message) {
+            String format = source.equals("system")
+                ? plugin.getConfig().getString("formats.system-message", "[System] {message}")
+                : plugin.getConfig().getString("formats." + source + "-to-bridge", "[{sender}] {message}");
+
+            String formatted = format.replace("{sender}", sender).replace("{message}", message);
+
+            if (!source.equalsIgnoreCase("telegram") && telegramBridge != null) {
+                telegramBridge.sendMessage(formatted);
+            }
+            if (!source.equalsIgnoreCase("matrix") && matrixBridge != null) {
+                matrixBridge.sendMessage(formatted);
+            }
+            if (!source.equalsIgnoreCase("discord") && discordBridge != null) {
+                discordBridge.sendMessage(formatted);
+            }
+        }
+
+        public void processLinkCommand(String messenger, String externalId, String code) {
+            if (!plugin.getConfig().getBoolean("features.account-linking", true)) {
+                sendToBridges(messenger, "System", "Account linking is currently disabled");
+                return;
+            }
+            plugin.handleLinkCode(messenger, externalId, code);
+        }
+    }
+
+    public class TelegramBridge extends TelegramLongPollingBot {
+        private final Main plugin;
+        private final String token;
+        private String activeGroupChatId;
+        private final Set<String> processedMessages = new HashSet<>();
+
+        public TelegramBridge(Main plugin, String token) throws Exception {
+            this.plugin = plugin;
+            this.token = token;
+
+            Proxy proxy = plugin.getProxyFromConfig();
+            if (!proxy.equals(Proxy.NO_PROXY)) {
+                InetSocketAddress addr = (InetSocketAddress) proxy.address();
+                if (proxy.type() == Proxy.Type.SOCKS) {
+                    System.setProperty("socksProxyHost", addr.getHostName());
+                    System.setProperty("socksProxyPort", Integer.toString(addr.getPort()));
+                } else if (proxy.type() == Proxy.Type.HTTP) {
+                    System.setProperty("http.proxyHost", addr.getHostName());
+                    System.setProperty("http.proxyPort", Integer.toString(addr.getPort()));
+                }
+            }
+            new TelegramBotsApi(DefaultBotSession.class).registerBot(this);
+        }
+
+        @Override public String getBotUsername() { return "TeleNukkitBot"; }
+        @Override public String getBotToken() { return token; }
+
+        private void sendToChat(String chatId, String message) {
+            try {
+                execute(new SendMessage(chatId, message));
+            } catch (TelegramApiException e) {
+                plugin.getLogger().error("Error sending to Telegram", e);
+            }
+        }
+
+        @Override public void onUpdateReceived(Update update) {
+            if (!update.hasMessage() || !update.getMessage().hasText()) return;
+
+            Message message = update.getMessage();
+            String messageId = message.getMessageId().toString();
+            if (processedMessages.contains(messageId)) return;
+            processedMessages.add(messageId);
+
+            Chat chat = message.getChat();
+            String text = message.getText();
+            String sender = message.getFrom().getUserName();
+
+            if (text.startsWith("/link ")) {
+                String code = text.substring(6).trim();
+                Main.this.getBridgeManager().processLinkCommand("telegram", sender, code);
+                return;
+            }
+
+            if (chat.isGroupChat() || chat.isSuperGroupChat()) {
+                if (activeGroupChatId == null) {
+                    activeGroupChatId = chat.getId().toString();
+                    sendToChat(activeGroupChatId, "Bot activated in this group!");
+                    return;
+                }
+
+                if (text.equalsIgnoreCase("/online")) {
+                    sendToChat(activeGroupChatId, Main.this.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
+                } else if (!text.startsWith("/")) {
+                    String minecraftName = plugin.reverseLinks.get(sender);
+                    String displayName = minecraftName != null ? minecraftName : sender;
+                    Main.this.getBridgeManager().sendToGame(displayName, text);
+                }
+            }
+        }
+
+        public void sendMessage(String message) {
+            if (activeGroupChatId != null) sendToChat(activeGroupChatId, message);
+        }
+    }
+
+    public class MatrixBridge {
+        private final Main plugin;
+        private final String homeserver;
+        private final String accessToken;
+        private final String roomId;
+        private final OkHttpClient httpClient;
+
+        public MatrixBridge(Main plugin, String homeserver, String accessToken, String roomId) {
+            this.plugin = plugin;
+            this.homeserver = homeserver;
+            this.accessToken = accessToken;
+            this.roomId = roomId;
+            this.httpClient = plugin.createHttpClientWithProxy();
+        }
+
+        public void sendMessage(String message) {
+            try {
+                JSONObject body = new JSONObject().put("msgtype", "m.text").put("body", message);
+                Request request = new Request.Builder()
+                    .url(homeserver + "/_matrix/client/r0/rooms/" + roomId + "/send/m.room.message?access_token=" + accessToken)
+                    .post(RequestBody.create(body.toString(), MediaType.get("application/json")))
+                    .build();
+                httpClient.newCall(request).enqueue(new Callback() {
+                    @Override public void onFailure(Call call, IOException e) {
+                        plugin.getLogger().error("Matrix message failed: " + e.getMessage());
+                    }
+                    @Override public void onResponse(Call call, Response response) throws IOException {
+                        if (!response.isSuccessful()) plugin.getLogger().error("Matrix message error: " + response.body().string());
+                        response.close();
+                    }
+                });
+            } catch (Exception e) {
+                plugin.getLogger().error("Matrix send error", e);
+            }
+        }
+    }
+
+    public class DiscordBridge {
+        private final Main plugin;
+        private final String token;
+        private final String channelId;
+        private final OkHttpClient httpClient;
+
+        public DiscordBridge(Main plugin, String token, String channelId) {
+            this.plugin = plugin;
+            this.token = token;
+            this.channelId = channelId;
+            this.httpClient = plugin.createHttpClientWithProxy();
+        }
+
+        public void sendMessage(String message) {
+            try {
+                JSONObject body = new JSONObject().put("content", message);
+                Request request = new Request.Builder()
+                    .url("https://discord.com/api/v9/channels/" + channelId + "/messages")
+                    .post(RequestBody.create(body.toString(), MediaType.get("application/json")))
+                    .header("Authorization", "Bot " + token)
+                    .header("User-Agent", "TeleNukkit")
+                    .build();
+                httpClient.newCall(request).enqueue(new Callback() {
+                    @Override public void onFailure(Call call, IOException e) {
+                        plugin.getLogger().error("Discord message failed: " + e.getMessage());
+                    }
+                    @Override public void onResponse(Call call, Response response) throws IOException {
+                        if (!response.isSuccessful()) plugin.getLogger().error("Discord message error: " + response.body().string());
+                        response.close();
+                    }
+                });
+            } catch (Exception e) {
+                plugin.getLogger().error("Discord send error", e);
+            }
+        }
+    }
+
+    public static class LanguagePack {
+        public final String online;
+        public final String join;
+        public final String quit;
+        public LanguagePack(Map<String, String> messages) {
+            this.online = messages.get("online");
+            this.join = messages.get("join");
+            this.quit = messages.get("quit");
+        }
     }
 }
