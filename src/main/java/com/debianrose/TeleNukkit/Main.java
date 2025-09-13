@@ -11,6 +11,7 @@ import cn.nukkit.command.Command;
 import cn.nukkit.command.CommandSender;
 import cn.nukkit.utils.Config;
 import cn.nukkit.scheduler.AsyncTask;
+import org.yaml.snakeyaml.Yaml;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -24,10 +25,15 @@ import okhttp3.*;
 import java.util.*;
 import java.io.IOException;
 import java.io.File;
+import java.io.InputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.ConcurrentHashMap;
 import java.net.Proxy;
 import java.net.InetSocketAddress;
+import java.net.URL;
+import java.net.HttpURLConnection;
 
 public class Main extends PluginBase implements Listener {
     private BridgeManager bridgeManager;
@@ -37,18 +43,21 @@ public class Main extends PluginBase implements Listener {
     private Config accountLinks;
     private final HashMap<String, String> prefixCache = new HashMap<>();
     private final HashMap<String, String> accountLinkCache = new HashMap<>();
-    private final Map<String, String> linkCodes = new ConcurrentHashMap<>(); // thread-safe for async ops
+    private final Map<String, String> linkCodes = new ConcurrentHashMap<>();
     private final Map<String, String> reverseLinks = new HashMap<>();
     private boolean updateAvailable = false;
     private String latestVersion = "";
+    private final String langFolderName = "lang";
+    private final String crowdinBaseUrl = "https://raw.githubusercontent.com/debianrose/TeleNukkit/main/lang/";
+    private final String[] supportedLanguages = {"en", "ru", "es", "fr", "zh"};
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         reloadConfig();
-        initLanguages();
         loadDataFiles();
         language = getConfig().getString("language", "en");
+        downloadAndLoadLangFiles();
 
         if (getConfig().getBoolean("settings.check-for-updates", true)) {
             checkForUpdatesAsync();
@@ -66,18 +75,65 @@ public class Main extends PluginBase implements Listener {
 
     private void notifyUpdateIfAvailable() {
         if (updateAvailable) {
-            getLogger().info("§eUpdate available! Version " + latestVersion);
-            bridgeManager.sendToBridges("system", "Update Checker", 
-                "New plugin update available: " + latestVersion);
+            getLogger().info(tr("update_available").replace("{version}", latestVersion));
+            bridgeManager.sendToBridges("system", "Update Checker", tr("update_available").replace("{version}", latestVersion));
         }
     }
 
-    private void initLanguages() {
-        languages.put("en", new LanguagePack(Map.of("online", "Players online: ", "join", " joined the game!", "quit", " left the game!")));
-        languages.put("ru", new LanguagePack(Map.of("online", "Игроков онлайн: ", "join", " зашел на сервер!", "quit", " вышел с сервера!")));
-        languages.put("es", new LanguagePack(Map.of("online", "Jugadores en línea: ", "join", " se unió al juego!", "quit", " dejó el juego!")));
-        languages.put("fr", new LanguagePack(Map.of("online", "Joueurs en ligne: ", "join", " a rejoint le jeu!", "quit", " a quitté le jeu!")));
-        languages.put("zh", new LanguagePack(Map.of("online", "在线玩家: ", "join", " 加入了游戏!", "quit", " 离开了游戏!")));
+    private void downloadAndLoadLangFiles() {
+        File langFolder = new File(getDataFolder(), langFolderName);
+        if (!langFolder.exists()) {
+            langFolder.mkdirs();
+        }
+        for (String langCode : supportedLanguages) {
+            File langFile = new File(langFolder, langCode + ".yml");
+            if (!langFile.exists()) {
+                downloadLangFile(langCode, langFile);
+            }
+            loadLanguagePackFromFile(langCode, langFile);
+        }
+    }
+
+    private void downloadLangFile(String langCode, File langFile) {
+        String urlStr = crowdinBaseUrl + langCode + ".yml";
+        try {
+            URL url = new URL(urlStr);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+            conn.setRequestMethod("GET");
+            int responseCode = conn.getResponseCode();
+            if (responseCode == 200) {
+                try (InputStream in = conn.getInputStream();
+                     FileOutputStream fos = new FileOutputStream(langFile)) {
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    while ((bytesRead = in.read(buffer)) != -1) {
+                        fos.write(buffer, 0, bytesRead);
+                    }
+                }
+            }
+            conn.disconnect();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void loadLanguagePackFromFile(String langCode, File langFile) {
+        if (!langFile.exists()) {
+            return;
+        }
+        try (InputStream in = new FileInputStream(langFile)) {
+            Yaml yaml = new Yaml();
+            Object raw = yaml.load(in);
+            if (raw instanceof Map) {
+                Map<String, String> messages = new HashMap<>();
+                for (Map.Entry<?, ?> entry : ((Map<?, ?>) raw).entrySet()) {
+                    messages.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
+                }
+                languages.put(langCode, new LanguagePack(messages));
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void loadDataFiles() {
@@ -141,12 +197,14 @@ public class Main extends PluginBase implements Listener {
     @EventHandler
     public void onPlayerChat(PlayerChatEvent event) {
         Player player = event.getPlayer();
-        String prefix = getPrefix(player);
-        String linkedAccount = getLinkedAccount(player);
-
         String senderName = player.getName();
-        if (linkedAccount != null) senderName = "[MC] " + senderName;
-        if (!prefix.isEmpty()) senderName = prefix + " " + senderName;
+        String prefix = getPrefix(player);
+
+        if (!prefix.isEmpty()) {
+            senderName = prefix + " " + senderName;
+        } else {
+            senderName = "[MC] " + senderName;
+        }
 
         bridgeManager.sendToBridges("minecraft", senderName, event.getMessage());
     }
@@ -154,21 +212,21 @@ public class Main extends PluginBase implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         if (getConfig().getBoolean("features.join-notifications", true)) {
-            bridgeManager.sendToBridges("minecraft", event.getPlayer().getName(), languages.get(language).join);
+            bridgeManager.sendToBridges("minecraft", event.getPlayer().getName(), tr("join").replace("{player}", event.getPlayer().getName()));
         }
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         if (getConfig().getBoolean("features.quit-notifications", true)) {
-            bridgeManager.sendToBridges("minecraft", event.getPlayer().getName(), languages.get(language).quit);
+            bridgeManager.sendToBridges("minecraft", event.getPlayer().getName(), tr("quit").replace("{player}", event.getPlayer().getName()));
         }
     }
 
     public void handleLinkCode(String messenger, String externalId, String code) {
         String playerName = linkCodes.get(code);
         if (playerName == null) {
-            bridgeManager.sendToBridges(messenger, "System", "Invalid link code!");
+            bridgeManager.sendToBridges(messenger, "System", tr("invalid_link_code"));
             return;
         }
 
@@ -181,10 +239,10 @@ public class Main extends PluginBase implements Listener {
         prefixes.save();
         prefixCache.put(playerName.toLowerCase(), "[" + messenger.toUpperCase() + "]");
 
-        bridgeManager.sendToBridges("system", "System", playerName + " linked their account to " + messenger);
+        bridgeManager.sendToBridges("system", "System", tr("link_success").replace("{player}", playerName).replace("{messenger}", messenger));
         Player player = getServer().getPlayerExact(playerName);
         if (player != null) {
-            player.sendMessage("§aYour account has been linked to " + messenger + "!");
+            player.sendMessage("§a" + tr("link_success").replace("{player}", playerName).replace("{messenger}", messenger));
         }
     }
 
@@ -199,8 +257,32 @@ public class Main extends PluginBase implements Listener {
             case "unlinkaccount": return handleUnlinkAccount(sender);
             case "togglelinking": return handleToggleLinking(sender, args);
             case "checkupdate": return handleCheckUpdate(sender);
+            case "setlang": return handleSetLang(sender, args);
+            case "testproxy": return handleTestProxy(sender);
             default: return handleUnknownCommand(sender);
         }
+    }
+
+    private boolean handleSetLang(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("telenukkit.admin")) {
+            sender.sendMessage("§cYou don't have permission to use this command!");
+            return true;
+        }
+        if (args.length != 1) {
+            sender.sendMessage("§eUsage: /setlang <lang>");
+            sender.sendMessage("§eAvailable: en, ru, es, fr, zh");
+            return true;
+        }
+        String newLang = args[0];
+        if (!languages.containsKey(newLang)) {
+            sender.sendMessage("§cLanguage not found: " + newLang);
+            return true;
+        }
+        language = newLang;
+        getConfig().set("language", newLang);
+        saveConfig();
+        sender.sendMessage("§aLanguage switched to: " + newLang);
+        return true;
     }
 
     private boolean handleTeleSetup(CommandSender sender, String[] args) {
@@ -298,7 +380,7 @@ public class Main extends PluginBase implements Listener {
         }
 
         if (!getConfig().getBoolean("features.account-linking", true)) {
-            sender.sendMessage("§cAccount linking is currently disabled!");
+            sender.sendMessage("§c" + tr("account_linking_disabled"));
             return true;
         }
 
@@ -310,8 +392,8 @@ public class Main extends PluginBase implements Listener {
             linkCodes.remove(code);
         }, 20 * 60 * 5);
 
-        player.sendMessage("§aYour link code: §e" + code);
-        player.sendMessage("§aUse this code in your messaging app with /link command");
+        player.sendMessage("§a" + tr("your_link_code").replace("{code}", code));
+        player.sendMessage("§a" + tr("link_instruction"));
         return true;
     }
 
@@ -325,7 +407,7 @@ public class Main extends PluginBase implements Listener {
         String playerName = player.getName().toLowerCase();
 
         if (!accountLinks.exists(playerName)) {
-            sender.sendMessage("§cYour account is not linked!");
+            sender.sendMessage("§c" + tr("account_not_linked"));
             return true;
         }
 
@@ -338,8 +420,8 @@ public class Main extends PluginBase implements Listener {
         prefixes.save();
         prefixCache.remove(playerName);
 
-        sender.sendMessage("§aYour account has been unlinked!");
-        bridgeManager.sendToBridges("system", "System", player.getName() + " unlinked their account");
+        sender.sendMessage("§a" + tr("unlink_success").replace("{player}", player.getName()));
+        bridgeManager.sendToBridges("system", "System", tr("unlink_success").replace("{player}", player.getName()));
         return true;
     }
 
@@ -358,30 +440,52 @@ public class Main extends PluginBase implements Listener {
         getConfig().set("features.account-linking", enable);
         saveConfig();
 
-        String status = enable ? "§aenabled" : "§cdisabled";
-        sender.sendMessage("§7Account linking has been " + status);
-        bridgeManager.sendToBridges("system", "System",
-            "Account linking has been " + (enable ? "enabled" : "disabled"));
+        String status = enable ? tr("enabled") : tr("disabled");
+        sender.sendMessage("§7" + tr("account_linking_status").replace("{status}", status));
+        bridgeManager.sendToBridges("system", "System", tr("account_linking_status").replace("{status}", status));
         return true;
     }
 
     private boolean handleCheckUpdate(CommandSender sender) {
         if (updateAvailable) {
-            sender.sendMessage("§eUpdate available! Version " + latestVersion);
+            sender.sendMessage("§e" + tr("update_available").replace("{version}", latestVersion));
             sender.sendMessage("§eDownload at: https://github.com/debianrose/TeleNukkit/releases");
         } else {
-            sender.sendMessage("§aYou're using the latest version!");
+            sender.sendMessage("§a" + tr("latest_version"));
         }
         return true;
     }
 
+    private boolean handleTestProxy(CommandSender sender) {
+        OkHttpClient client = createHttpClientWithProxy();
+        Request req = new Request.Builder().url("https://api.github.com/").build();
+        sender.sendMessage(tr("proxy_check_started"));
+        getServer().getScheduler().scheduleAsyncTask(this, new AsyncTask() {
+            @Override
+            public void onRun() {
+                try (Response resp = client.newCall(req).execute()) {
+                    if (resp.isSuccessful()) {
+                        sender.sendMessage(tr("proxy_ok").replace("{code}", String.valueOf(resp.code())));
+                    } else {
+                        sender.sendMessage(tr("proxy_failed").replace("{code}", String.valueOf(resp.code())));
+                    }
+                } catch (Exception e) {
+                    sender.sendMessage(tr("proxy_error").replace("{error}", e.getMessage()));
+                }
+            }
+        });
+        return true;
+    }
+
     private boolean handleUnknownCommand(CommandSender sender) {
-        sender.sendMessage("§cUnknown command. Available commands:");
-        sender.sendMessage("§a/getlinkcode §7- Get account linking code");
-        sender.sendMessage("§a/unlinkaccount §7- Unlink your account");
-        sender.sendMessage("§a/togglelinking §7- Toggle account linking (admin)");
-        sender.sendMessage("§a/checkupdate §7- Check for plugin updates");
-        sender.sendMessage("§a/telesetup §7- Configure bridges (admin)");
+        sender.sendMessage("§c" + tr("unknown_command"));
+        sender.sendMessage("§a/getlinkcode §7- " + tr("cmd_getlinkcode"));
+        sender.sendMessage("§a/unlinkaccount §7- " + tr("cmd_unlinkaccount"));
+        sender.sendMessage("§a/togglelinking §7- " + tr("cmd_togglelinking"));
+        sender.sendMessage("§a/checkupdate §7- " + tr("cmd_checkupdate"));
+        sender.sendMessage("§a/telesetup §7- " + tr("cmd_telesetup"));
+        sender.sendMessage("§a/setlang §7- " + tr("cmd_setlang"));
+        sender.sendMessage("§a/testproxy §7- " + tr("cmd_testproxy"));
         return true;
     }
 
@@ -402,25 +506,13 @@ public class Main extends PluginBase implements Listener {
         return "";
     }
 
-    private String getLinkedAccount(Player player) {
-        String name = player.getName().toLowerCase();
-        if (accountLinkCache.containsKey(name)) {
-            return accountLinkCache.get(name);
-        }
-        if (accountLinks.exists(name)) {
-            String account = accountLinks.getString(name);
-            accountLinkCache.put(name, account);
-            return account;
-        }
-        return null;
-    }
-
     public BridgeManager getBridgeManager() {
         return bridgeManager;
     }
 
-    public LanguagePack getLanguagePack() {
-        return languages.get(language);
+    public String tr(String key) {
+        LanguagePack pack = languages.getOrDefault(language, languages.get("en"));
+        return pack.get(key);
     }
 
     public class BridgeManager {
@@ -473,7 +565,7 @@ public class Main extends PluginBase implements Listener {
 
         public void processLinkCommand(String messenger, String externalId, String code) {
             if (!plugin.getConfig().getBoolean("features.account-linking", true)) {
-                sendToBridges(messenger, "System", "Account linking is currently disabled");
+                sendToBridges(messenger, "System", plugin.tr("account_linking_disabled"));
                 return;
             }
             plugin.handleLinkCode(messenger, externalId, code);
@@ -541,7 +633,7 @@ public class Main extends PluginBase implements Listener {
                 }
 
                 if (text.equalsIgnoreCase("/online")) {
-                    sendToChat(activeGroupChatId, Main.this.getLanguagePack().online + plugin.getServer().getOnlinePlayers().size());
+                    sendToChat(activeGroupChatId, Main.this.tr("online") + plugin.getServer().getOnlinePlayers().size());
                 } else if (!text.startsWith("/")) {
                     String minecraftName = plugin.reverseLinks.get(sender);
                     String displayName = minecraftName != null ? minecraftName : sender;
@@ -630,13 +722,12 @@ public class Main extends PluginBase implements Listener {
     }
 
     public static class LanguagePack {
-        public final String online;
-        public final String join;
-        public final String quit;
+        private final Map<String, String> messages;
         public LanguagePack(Map<String, String> messages) {
-            this.online = messages.get("online");
-            this.join = messages.get("join");
-            this.quit = messages.get("quit");
+            this.messages = messages;
+        }
+        public String get(String key) {
+            return messages.getOrDefault(key, key);
         }
     }
 }

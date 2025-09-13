@@ -1,40 +1,38 @@
-# Config Version - 2.2.6
-telegram:
-  enabled: true
-  botToken: "YOUR_TELEGRAM_BOT_TOKEN"
-  account-linking: true
-
-matrix:
-  enabled: true
-  homeserver: "https://matrix.example.org"
-  accessToken: "YOUR_MATRIX_ACCESS_TOKEN"
-  roomId: "!ROOM_ID:matrix.org"
-  account-linking: true
-
-discord:
-  enabled: true
-  token: "YOUR_DISCORD_BOT_TOKEN"
-  channel_id: "YOUR_CHANNEL_ID"
-  account-linking: true
-
-features:
-  account-linking: true
-  cross-chat: true
-  join-notifications: true
-  quit-notifications: true
-
-# Langs: en, ru, zh, es, fr
-language: "en"
-
-formats:
-  telegram-to-minecraft: "[TG] {sender}: {message}"
-  minecraft-to-telegram: "[MC] {sender}: {message}"
-  matrix-to-minecraft: "[MX] {sender}: {message}"
-  minecraft-to-matrix: "[MC] {sender}: {message}"
-  discord-to-minecraft: "[DS] {sender}: {message}"
-  minecraft-to-discord: "[MC] {sender}: {message}"
-  system-message: "[System] {message}"
+language: en # right now only english has been supported!
 
 settings:
   check-for-updates: true
-  first-run-setup: true
+
+features:
+  cross-chat: true
+  join-notifications: true
+  quit-notifications: true
+  account-linking: true
+
+proxy:
+  type: "" # HTTP or SOCKS
+  host: ""
+  port: 8080
+
+telegram:
+  enabled: false
+  botToken: "" #get from "@botfather"!
+
+matrix:
+  enabled: false
+  homeserver: "" #example: matrix.org
+  accessToken: "" #check out wiki!
+  roomId: ""
+
+discord:
+  enabled: false
+  token: ""
+  channel_id: ""
+
+#customize as you want!
+formats:
+  telegram-to-minecraft: "[TG] {sender}: {message}"
+  matrix-to-minecraft: "[MX] {sender}: {message}"
+  discord-to-minecraft: "[DC] {sender}: {message}"
+  system-message: "[System] {message}"
+  minecraft-to-bridge: "[MC] {sender}: {message}"

@@ -1,5 +1,5 @@
 name: TeleNukkit
-version: 1.0.1.2b2
+version: 1.0.1.3
 main: com.debianrose.TeleNukkit.Main
 api: ["1.0.0"]
 author: debianrose
@@ -18,7 +18,7 @@ commands:
   getlinkcode:
     description: Get your account linking code
     usage: /getlinkcode
-    aliases: [linkcode, codelink]
+    aliases: [linkcode, codelink, link]
     permission: telenukkit.user
   unlinkaccount:
     description: Unlink your external account
@@ -33,6 +33,14 @@ commands:
     description: Check for plugin updates
     usage: /checkupdate
     permission: telenukkit.user
+  setlang:
+    description: Change plugin language
+    usage: /setlang <lang>
+    permission: telenukkit.admin
+  testproxy:
+    description: Test proxy connectivity
+    usage: /testproxy
+    permission: telenukkit.admin
 
 permissions:
   telenukkit.user:
