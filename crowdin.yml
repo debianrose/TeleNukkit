@@ -1,4 +1,5 @@
 files:
-  - source: 'lang/en.yml'
-    translation: 'lang/%two_letters_code%.yml'
-    bundle: 'bundle'
+  - source: lang/en.yml
+    translation: lang/%two_letters_code%.yml
+bundles:
+  - 1
