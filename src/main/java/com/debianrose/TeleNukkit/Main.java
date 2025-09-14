@@ -34,6 +34,8 @@ import java.net.Proxy;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.net.HttpURLConnection;
+import java.net.Authenticator;
+import java.net.PasswordAuthentication;
 
 public class Main extends PluginBase implements Listener {
     private BridgeManager bridgeManager;
@@ -191,7 +193,24 @@ public class Main extends PluginBase implements Listener {
 
     private OkHttpClient createHttpClientWithProxy() {
         Proxy proxy = getProxyFromConfig();
-        return new OkHttpClient.Builder().proxy(proxy).build();
+        OkHttpClient.Builder builder = new OkHttpClient.Builder().proxy(proxy);
+        
+        String proxyUser = getConfig().getString("proxy.username", "");
+        String proxyPass = getConfig().getString("proxy.password", "");
+        
+        if (!proxyUser.isEmpty() && !proxyPass.isEmpty()) {
+            Authenticator.setDefault(new Authenticator() {
+                @Override
+                protected PasswordAuthentication getPasswordAuthentication() {
+                    if (getRequestorType() == Authenticator.RequestorType.PROXY) {
+                        return new PasswordAuthentication(proxyUser, proxyPass.toCharArray());
+                    }
+                    return null;
+                }
+            });
+        }
+        
+        return builder.build();
     }
 
     @EventHandler
@@ -202,8 +221,6 @@ public class Main extends PluginBase implements Listener {
 
         if (!prefix.isEmpty()) {
             senderName = prefix + " " + senderName;
-        } else {
-            senderName = "[MC] " + senderName;
         }
 
         bridgeManager.sendToBridges("minecraft", senderName, event.getMessage());
@@ -212,14 +229,28 @@ public class Main extends PluginBase implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         if (getConfig().getBoolean("features.join-notifications", true)) {
-            bridgeManager.sendToBridges("minecraft", event.getPlayer().getName(), tr("join").replace("{player}", event.getPlayer().getName()));
+            String senderName = event.getPlayer().getName();
+            String prefix = getPrefix(event.getPlayer());
+            
+            if (!prefix.isEmpty()) {
+                senderName = prefix + " " + senderName;
+            }
+            
+            bridgeManager.sendToBridges("minecraft", senderName, tr("join").replace("{player}", event.getPlayer().getName()));
         }
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         if (getConfig().getBoolean("features.quit-notifications", true)) {
-            bridgeManager.sendToBridges("minecraft", event.getPlayer().getName(), tr("quit").replace("{player}", event.getPlayer().getName()));
+            String senderName = event.getPlayer().getName();
+            String prefix = getPrefix(event.getPlayer());
+            
+            if (!prefix.isEmpty()) {
+                senderName = prefix + " " + senderName;
+            }
+            
+            bridgeManager.sendToBridges("minecraft", senderName, tr("quit").replace("{player}", event.getPlayer().getName()));
         }
     }
 
@@ -420,8 +451,9 @@ public class Main extends PluginBase implements Listener {
         prefixes.save();
         prefixCache.remove(playerName);
 
-        sender.sendMessage("§a" + tr("unlink_success").replace("{player}", player.getName()));
-        bridgeManager.sendToBridges("system", "System", tr("unlink_success").replace("{player}", player.getName()));
+        String unlinkMessage = tr("unlink_success_player").replace("{player}", player.getName());
+        sender.sendMessage("§a" + unlinkMessage);
+        bridgeManager.sendToBridges("system", "System", unlinkMessage);
         return true;
     }
 
@@ -546,9 +578,14 @@ public class Main extends PluginBase implements Listener {
         }
 
         public void sendToBridges(String source, String sender, String message) {
-            String format = source.equals("system")
-                ? plugin.getConfig().getString("formats.system-message", "[System] {message}")
-                : plugin.getConfig().getString("formats.minecraft-to-bridge", "[{sender}] {message}");
+            String format;
+            if (source.equals("system")) {
+                format = plugin.getConfig().getString("formats.system-message", "[System] {message}");
+            } else if (source.equals("minecraft")) {
+                format = plugin.getConfig().getString("formats.minecraft-to-bridge", "[{sender}] {message}");
+            } else {
+                format = "[{sender}] {message}";
+            }
 
             String formatted = format.replace("{sender}", sender).replace("{message}", message);
 
@@ -628,7 +665,6 @@ public class Main extends PluginBase implements Listener {
             if (chat.isGroupChat() || chat.isSuperGroupChat()) {
                 if (activeGroupChatId == null) {
                     activeGroupChatId = chat.getId().toString();
-                    sendToChat(activeGroupChatId, "Bot activated in this group!");
                     return;
                 }
 
