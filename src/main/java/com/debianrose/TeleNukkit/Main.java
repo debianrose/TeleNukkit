@@ -76,7 +76,7 @@ public class Main extends PluginBase implements Listener {
     private void notifyUpdateIfAvailable() {
         if (updateAvailable) {
             getLogger().info(tr("update_available").replace("{version}", latestVersion));
-            bridgeManager.sendToBridges("system", "Update Checker", tr("update_available").replace("{version}", latestVersion));
+            bridgeManager.sendToBridges("system", "System", tr("update_available").replace("{version}", latestVersion));
         }
     }
 
@@ -548,7 +548,7 @@ public class Main extends PluginBase implements Listener {
         public void sendToBridges(String source, String sender, String message) {
             String format = source.equals("system")
                 ? plugin.getConfig().getString("formats.system-message", "[System] {message}")
-                : plugin.getConfig().getString("formats." + source + "-to-bridge", "[{sender}] {message}");
+                : plugin.getConfig().getString("formats.minecraft-to-bridge", "[{sender}] {message}");
 
             String formatted = format.replace("{sender}", sender).replace("{message}", message);
 
