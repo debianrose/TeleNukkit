@@ -25,6 +25,8 @@ cmd_checkupdate: "Check for plugin updates"
 cmd_telesetup: "Setup messenger bridges"
 cmd_setlang: "Change plugin language"
 cmd_testproxy: "Test proxy connection"
+unlink_success_player: "{player} unlinked their account"
+unlink_success: "Account {player} has been unlinked"
 
 #⠀⠀⠀⣠⠤⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣀⠀⠀
 #⠀⠀⡜⠁⠀⠈⢢⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⠋⠷⠶⠱⡄
