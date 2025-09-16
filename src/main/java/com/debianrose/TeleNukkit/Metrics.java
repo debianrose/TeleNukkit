@@ -1,4 +1,4 @@
-package org.bstats.nukkit;
+package com.debianrose.TeleNukkit;
 
 import cn.nukkit.Server;
 import cn.nukkit.plugin.Plugin;

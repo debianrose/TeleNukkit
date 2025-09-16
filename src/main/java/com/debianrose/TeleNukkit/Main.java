@@ -36,6 +36,7 @@ import java.net.URL;
 import java.net.HttpURLConnection;
 import java.net.Authenticator;
 import java.net.PasswordAuthentication;
+import com.debianrose.TeleNukkit.Metrics;
 
 public class Main extends PluginBase implements Listener {
     private BridgeManager bridgeManager;
@@ -51,7 +52,8 @@ public class Main extends PluginBase implements Listener {
     private String latestVersion = "";
     private final String langFolderName = "lang";
     private final String crowdinBaseUrl = "https://raw.githubusercontent.com/debianrose/TeleNukkit/main/lang/";
-    private final String[] supportedLanguages = {"en", "ru", "es", "fr", "zh"};
+    private final String[] supportedLanguages = {"en", "ru"};
+    private Metrics metrics;
 
     @Override
     public void onEnable() {
@@ -60,6 +62,8 @@ public class Main extends PluginBase implements Listener {
         loadDataFiles();
         language = getConfig().getString("language", "en");
         downloadAndLoadLangFiles();
+
+        initializeMetrics();
 
         if (getConfig().getBoolean("settings.check-for-updates", true)) {
             checkForUpdatesAsync();
@@ -73,6 +77,56 @@ public class Main extends PluginBase implements Listener {
         } catch (Exception e) {
             getLogger().error("Error while starting plugin", e);
         }
+    }
+
+    private void initializeMetrics() {
+        try {
+            int pluginId = 27289;
+            
+            metrics = new Metrics(this, pluginId);
+            
+            addCustomCharts();
+            
+            getLogger().info("bStats metrics initialized successfully!");
+        } catch (Exception e) {
+            getLogger().warning("Failed to initialize bStats metrics: " + e.getMessage());
+        }
+    }
+
+    private void addCustomCharts() {
+        metrics.addCustomChart(new Metrics.SimplePie("enabled_bridges", () -> {
+            List<String> enabledBridges = new ArrayList<>();
+            if (getConfig().getBoolean("telegram.enabled", false)) enabledBridges.add("telegram");
+            if (getConfig().getBoolean("matrix.enabled", false)) enabledBridges.add("matrix");
+            if (getConfig().getBoolean("discord.enabled", false)) enabledBridges.add("discord");
+            return enabledBridges.isEmpty() ? "none" : String.join(",", enabledBridges);
+        }));
+
+        metrics.addCustomChart(new Metrics.SimplePie("account_linking_enabled", () -> {
+            return getConfig().getBoolean("features.account-linking", true) ? "enabled" : "disabled";
+        }));
+
+        metrics.addCustomChart(new Metrics.SingleLineChart("linked_accounts", () -> {
+            return accountLinks.getKeys().size();
+        }));
+
+        metrics.addCustomChart(new Metrics.SimplePie("language", () -> {
+            return language;
+        }));
+
+        metrics.addCustomChart(new Metrics.SimplePie("proxy_used", () -> {
+            String proxyType = getConfig().getString("proxy.type", "");
+            return proxyType.isEmpty() ? "none" : proxyType;
+        }));
+
+        metrics.addCustomChart(new Metrics.SimplePie("join_quit_notifications", () -> {
+            return getConfig().getBoolean("features.join-notifications", true) && 
+                   getConfig().getBoolean("features.quit-notifications", true) ? "both" : "partial";
+        }));
+
+        metrics.addCustomChart(new Metrics.SimplePie("update_checking", () -> {
+            return getConfig().getBoolean("settings.check-for-updates", true) ? "enabled" : "disabled";
+        }));
     }
 
     private void notifyUpdateIfAvailable() {
