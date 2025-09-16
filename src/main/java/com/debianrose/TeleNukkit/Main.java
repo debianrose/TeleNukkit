@@ -80,18 +80,21 @@ public class Main extends PluginBase implements Listener {
     }
 
     private void initializeMetrics() {
-        try {
-            int pluginId = 27289;
-            
-            metrics = new Metrics(this, pluginId);
-            
-            addCustomCharts();
-            
-            getLogger().info("bStats metrics initialized successfully!");
-        } catch (Exception e) {
-            getLogger().warning("Failed to initialize bStats metrics: " + e.getMessage());
+    try {
+        if (!getConfig().getBoolean("settings.enable-metrics", true)) {
+            getLogger().info("bStats metrics disabled by config");
+            return;
         }
+        
+        int pluginId = 27289;
+        metrics = new Metrics(this, pluginId);
+        addCustomCharts();
+        getLogger().info("bStats metrics initialized");
+    } catch (Exception e) {
+        getLogger().warning("Failed to initialize bStats: " + e.getMessage());
     }
+}
+
 
     private void addCustomCharts() {
         metrics.addCustomChart(new Metrics.SimplePie("enabled_bridges", () -> {

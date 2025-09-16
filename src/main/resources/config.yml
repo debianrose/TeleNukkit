@@ -2,6 +2,8 @@ language: en
 
 settings:
   check-for-updates: true
+  enable-metrics: true # if you want - disable
+  #i need metrics only for knowing what kind Nukkit Fork you use
 
 features:
   cross-chat: true
