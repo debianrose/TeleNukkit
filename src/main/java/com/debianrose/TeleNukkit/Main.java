@@ -79,22 +79,24 @@ public class Main extends PluginBase implements Listener {
         }
     }
 
-    private void initializeMetrics() {
-    try {
-        if (!getConfig().getBoolean("settings.enable-metrics", true)) {
-            getLogger().info("bStats metrics disabled by config");
-            return;
-        }
-        
-        int pluginId = 27289;
-        metrics = new Metrics(this, pluginId);
-        addCustomCharts();
-        getLogger().info("bStats metrics initialized");
-    } catch (Exception e) {
-        getLogger().warning("Failed to initialize bStats: " + e.getMessage());
-    }
-}
-
+   private void initializeMetrics() {
+       try {
+           if (!getConfig().getBoolean("settings.enable-metrics", true)) {
+               getLogger().info("bStats metrics disabled by config");
+               return;
+           }
+           
+           int pluginId = 27289;
+           metrics = new Metrics(this, pluginId);
+           addCustomCharts();
+           getLogger().info("bStats metrics initialized");
+           
+           getLogger().info("Metrics enabled - to disable set 'enable-metrics: false' in config.yml \n if you dont want share your Nukkit version");
+           
+       } catch (Exception e) {
+           getLogger().warning("Failed to initialize bStats: " + e.getMessage());
+       }
+   }
 
     private void addCustomCharts() {
         metrics.addCustomChart(new Metrics.SimplePie("enabled_bridges", () -> {
@@ -358,7 +360,7 @@ public class Main extends PluginBase implements Listener {
         }
         if (args.length != 1) {
             sender.sendMessage("§eUsage: /setlang <lang>");
-            sender.sendMessage("§eAvailable: en, ru, es, fr, zh");
+            sender.sendMessage("§eAvailable: en, ru");
             return true;
         }
         String newLang = args[0];
